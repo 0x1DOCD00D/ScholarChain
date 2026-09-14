@@ -1,18 +1,18 @@
 # CS441 Course Project: ScholarChain
 
-Project type: AWS cloud computing, distributed big data processing, AI agentic software engineering, Graph-RAG, Infrastructure as Code, DevOps, elasticity, and empirical evaluation
+Project type: AWS cloud computing, distributed big data processing, AI agentic software engineering, Graph-RAG, Infrastructure as Code, elasticity, and empirical evaluation
 
 Grade: 20 points
 
-Submission deadline: Wednesday, November, 25, 2026 at 11PM CST
+Submission deadline: Wednesday, November 25, 2026 at 11PM CST
 
 Reference agentic implementation: [AgenticScalaAppTutorial](https://github.com/0x1DOCD00D/AgenticScalaAppTutorial)
 
 ## Project goal
 
-The goal of this project is to design, generate, deploy, and evaluate ScholarChain, an AWS-based scholarly intelligence system whose complete implementation is produced through a controlled AI agentic workflow.
+The goal of this project is to design, generate, deploy, and evaluate ScholarChain, an AWS-based scholarly collaboration intelligence system whose complete implementation is produced through a controlled AI agentic workflow.
 
-ScholarChain starts with the [DBLP XML publication dataset](https://dblp.org/xml/) and links DBLP records to several other open scholarly datasets. Hadoop MapReduce performs the first large-scale parsing, normalization, blocking, and join operations. Apache Spark converts the resulting records into a heterogeneous research graph and computes graph analytics. The processed graph and text are loaded into Amazon Neptune, Amazon DynamoDB, ordinary Amazon S3, Amazon S3 Vectors, and optionally Amazon OpenSearch Service. Multiple runtime AI agents then retrieve graph and vector evidence, rank it, verify it, and ask an LLM to produce an evidence-backed research briefing.
+ScholarChain starts with the [DBLP XML publication dataset](https://dblp.org/xml/) and links DBLP records to additional open scholarly datasets that improve researcher identity resolution and enrich researchers and publications with topics, institutions, identifiers, abstracts, venues, and citation context. Hadoop MapReduce performs the first large-scale parsing, normalization, author-mention preparation, blocking, joining, and coauthor-pair generation operations. Apache Spark consumes the Hadoop outputs, constructs a temporal weighted coauthorship graph, and computes distributed graph analytics over researchers and their collaboration relationships. The processed graph and supporting semantic context are loaded into Amazon Neptune, Amazon DynamoDB, ordinary Amazon S3, Amazon S3 Vectors, and optionally Amazon OpenSearch Service. Runtime AI agents then resolve researcher names, retrieve collaboration metrics and paths, retrieve semantic context, verify evidence, and ask an LLM to produce an evidence-backed explanation.
 
 The software itself must be generated using the repository-defined workflow demonstrated by AgenticScalaAppTutorial. Students act as architects, reviewers, and ratifiers. They provide intent, phase prompts, acceptance criteria, and human approvals. A main Claude Code session acts as the orchestrator. Specialized subagents under `.claude/agents/` own disjoint artifact classes. Hooks, permission fences, tests, reviews, and human gates constrain what those agents may do.
 
@@ -20,25 +20,86 @@ This is not a project in which one giant prompt is sent to an LLM and the result
 
 ## Required final capability
 
-A successful ScholarChain deployment must answer research questions that require multiple linked computations. A representative query is:
+A successful ScholarChain deployment must answer a family of related research questions about scientific collaboration. The central research problem is:
 
 ```text
-Which research directions in distributed systems security have grown since 2022, which papers form their citation lineage, which authors bridge otherwise separate communities, and which results appear reproducible from available code and benchmark evidence?
+Which researchers have collaborated with the largest and most diverse sets of coauthors, how strongly connected are researchers through direct and indirect coauthorship relationships, and which researchers act as bridges between otherwise separate collaboration communities?
+```
+
+The project decomposes this problem into three related questions.
+
+1. Which researchers have the broadest collaboration networks and which researchers publish papers with the largest author teams?
+
+This question distinguishes collaboration breadth from simple publication count. A researcher who publishes one hundred papers with the same three collaborators is structurally different from a researcher who publishes thirty papers with eighty different collaborators. The system must therefore report distinct coauthor counts, repeated collaboration counts, publication counts, average team size, maximum team size, and the papers responsible for unusually large collaboration teams.
+
+2. How connected are researchers through their coauthors?
+
+This question treats the coauthorship data as a graph. The system must identify direct collaborators, compute shortest coauthorship paths between researchers, identify connected components, report component sizes, and characterize how many collaboration hops separate researchers when a path exists. Where practical, the project should estimate component-level quantities such as average path length or effective diameter using scalable methods rather than collecting the full graph on one machine.
+
+3. Which researchers connect otherwise separate collaboration communities?
+
+A researcher can have fewer direct coauthors than another researcher and still be more important structurally because the researcher lies on paths between otherwise weakly connected groups. The system must therefore discover collaboration communities and compute one or more bridge measures such as betweenness centrality or an explicitly documented scalable approximation, cross-community edge count, number of communities connected, participation coefficient, or related measures. K-core or coreness should also be used to distinguish peripheral high-degree researchers from researchers embedded in dense collaboration structures.
+
+The final application must support time windows and enrichment filters such as research topic, venue, institution, and publication year when the linked datasets provide the necessary evidence. A representative query is:
+
+```text
+Which ten researchers have the broadest coauthorship networks in distributed systems since 2015, which of them have published papers with the largest author teams, and which of them are most important for connecting otherwise separate collaboration communities? Show direct collaboration counts, shortest-path or bridge evidence, representative papers, topics, institutions, and uncertainty in researcher identity resolution.
 ```
 
 The answer must include:
 
-- Ranked research directions.
-- Representative and foundational papers.
-- Citation and influence paths.
-- Author, venue, institution, topic, code, and benchmark relationships when available.
-- Spark-computed influence, growth, bridge, or reproducibility scores.
-- Text evidence retrieved from S3 Vectors or the optional OpenSearch tier.
+- Ranked researchers for the metric requested by the user.
+- Distinct coauthor counts and collaboration-strength measures.
+- Publication count, average coauthors per paper, and maximum coauthors on one paper.
+- The publication or publications that produced each reported maximum team size.
+- Direct and indirect coauthorship paths when connectivity is requested.
+- Connected-component and community membership information.
+- Bridge metrics with their definitions and limitations.
+- Temporal boundaries used for every metric.
+- Topic, institution, venue, and representative-publication context when available.
 - Stable identifiers and links back to source records.
-- Explicit uncertainty when evidence is incomplete or entity matches are ambiguous.
+- Explicit uncertainty when author identities or cross-dataset matches remain ambiguous.
 - A machine-readable evidence bundle supporting every material claim.
 
-The application must expose an evidence chain, not private model reasoning. The evidence chain consists of source records, graph paths, retrieved text chunks, computed scores, match confidence, prompt and model versions, and concise claim justifications. Hidden chain-of-thought is neither required nor accepted as proof.
+The application must expose an evidence chain, not private model reasoning. The evidence chain consists of source publication records, canonical researcher IDs, coauthorship edges, graph paths, computed metrics, semantic context, match confidence, prompt and model versions, and concise claim justifications. Hidden chain-of-thought is neither required nor accepted as proof.
+
+## What must be measured
+
+For every canonical researcher `r`, the project must compute and clearly distinguish at least the following quantities.
+
+```text
+P_r = number of publications attributed to researcher r
+C_r = number of distinct coauthors of researcher r
+T_r = total coauthor occurrences across all publications of researcher r
+A_r = average number of coauthors per publication of researcher r
+M_r = maximum number of coauthors on any single publication of researcher r
+W_r = weighted degree, where edge weight is the number of joint publications with each coauthor
+```
+
+`C_r` measures collaboration breadth. `W_r` and `T_r` measure collaboration intensity. `M_r` answers whether a researcher has participated in unusually large author teams. These values must not be collapsed into one unexplained score.
+
+For every canonical pair of researchers `u` and `v`, a coauthorship edge must record at least:
+
+```text
+jointPublicationCount
+firstCollaborationYear
+lastCollaborationYear
+representativeWorkIds
+```
+
+For connectivity analysis, the project must compute or retrieve:
+
+```text
+d(u,v) = shortest coauthorship-path length when u and v are connected
+componentId(r) = connected component containing researcher r
+componentSize(r) = number of researchers in that component
+```
+
+For community and bridge analysis, the project must compute a documented community assignment plus at least one bridge measure. Recommended measures include betweenness centrality or an approximation suitable for the selected graph size, cross-community degree, participation coefficient, and k-core or coreness.
+
+All metrics must be time-aware. The graph must support either explicit yearly snapshots or configurable windows such as 2000 to 2005, 2006 to 2010, and so on. This makes it possible to ask whether collaboration networks are becoming broader, whether team sizes are increasing, whether research communities are becoming more connected, and which researchers became bridges over time.
+
+A paper with `n` authors induces `n * (n - 1) / 2` undirected coauthor pairs before duplicate researcher pairs are consolidated. Large author teams can therefore create substantial pair expansion, which is one reason the project uses distributed processing rather than a local collection loop.
 
 ## Preliminaries and context
 
@@ -51,7 +112,6 @@ Before starting this project, students should be comfortable with the following 
 - AWS identity, networking, storage, compute, monitoring, and cost controls.
 - Docker and container registries.
 - Terraform basics.
-- Jenkins Pipeline.
 - RESTful microservices.
 - Retrieval Augmented Generation and vector embeddings.
 - LLM prompting, structured outputs, and hallucination controls.
@@ -70,18 +130,18 @@ The reference repository is a control-system example, not a ScholarChain solutio
 
 ## Overview and motivation
 
-Organizations and researchers face a familiar problem. Publication metadata, citation links, author identities, abstracts, full text, code repositories, benchmark tables, and institution records are distributed across independently maintained systems. A conventional search engine can find papers containing a phrase, but it has difficulty answering a compound question that requires citation traversal, author disambiguation, temporal analysis, reproducibility evidence, and synthesis across sources.
+Scholarly collaboration is distributed across millions of publication records, name variants, institutions, venues, research topics, and independently maintained identity systems. A simple bibliographic query can count papers by a literal author string, but it cannot safely answer who really has the broadest collaboration network, how two researchers are connected through intermediate coauthors, or which researchers bridge otherwise separate communities. Those questions require researcher identity resolution, pair generation, large graph construction, temporal analysis, and auditable path evidence.
 
-ScholarChain turns these disconnected records into an evidence-bearing research graph. Hadoop handles the high-volume record preparation that is naturally expressed as mapping, grouping, joining, and reducing. Spark performs iterative and graph-oriented analytics such as PageRank, connected components, community discovery, topic growth, bridge scoring, and evidence-path construction. Neptune stores graph topology. S3 Vectors stores durable embeddings for semantic retrieval. DynamoDB stores operational state and audit records. An optional OpenSearch tier supports hot or hybrid lexical and vector retrieval. Runtime agents combine these stores without confusing their responsibilities.
+ScholarChain turns publication metadata into an evidence-bearing temporal coauthorship graph. Hadoop handles high-volume record preparation that is naturally expressed as mapping, grouping, joining, reducing, and generating coauthor-pair candidates. Spark performs iterative and graph-oriented analytics such as distinct-degree computation, weighted degree, connected components, shortest-path or distance analysis, community discovery, bridge scoring, k-core analysis, temporal collaboration trends, and evidence-path construction. Neptune stores graph topology and supports bounded path retrieval. S3 Vectors stores durable embeddings of researcher profiles, collaboration-community summaries, representative paper abstracts, and path summaries. DynamoDB stores operational state and audit records. An optional OpenSearch tier supports hot or hybrid lexical and vector retrieval. Runtime agents combine these stores without confusing deterministic graph facts with LLM-generated interpretation.
 
 The project also addresses a second problem. LLMs can generate a surprising amount of software, but unrestricted generation creates ambiguous ownership, silent defects, weak review, accidental cloud changes, and artifacts nobody can reproduce. The AgenticScalaAppTutorial solves that problem by treating the repository as an engineered institution. A main orchestrator delegates work to narrow subagents. Each artifact class has one writer. Tests and reviewers are independent from implementation. Hooks create a deterministic safety floor. Human ratification is required for constitutional, destructive, costly, or security-sensitive changes.
 
 The educational value comes from combining these two systems:
 
 1. A build-time agentic software factory that creates and validates the complete ScholarChain repository.
-2. A runtime agentic Graph-RAG application that answers scholarly questions from explicit evidence.
+2. A runtime agentic collaboration-analysis application that answers graph questions from explicit evidence.
 
-Students therefore learn not only how to call an LLM, but how to control an LLM-based engineering organization and how to build an LLM application whose answers can be audited.
+Students therefore learn not only how to call an LLM, but how to control an LLM-based engineering organization and how to build an LLM application whose explanations are grounded in deterministic distributed computations.
 
 ## Functionality
 
@@ -89,23 +149,23 @@ ScholarChain must provide the following end-to-end functionality:
 
 1. Register and retrieve versioned open scholarly datasets.
 2. Store raw snapshots and manifests in Amazon S3.
-3. Parse DBLP XML and normalize records with Hadoop MapReduce.
+3. Parse DBLP XML and normalize publication and author-mention records with Hadoop MapReduce.
 4. Normalize at least three additional datasets with Hadoop MapReduce.
-5. Generate deterministic and probabilistic cross-dataset entity-link candidates.
-6. Produce accepted, rejected, and unresolved match records with provenance.
-7. Build a large heterogeneous research graph with Spark.
-8. Compute graph and temporal analytics with Spark.
-9. Load graph topology and properties into Neptune.
-10. Store operational records, match caches, query sessions, and audit records in DynamoDB.
-11. Store text chunks in ordinary S3 and embeddings plus compact metadata in S3 Vectors.
+5. Generate deterministic and probabilistic cross-dataset entity-link candidates, with special attention to author identity resolution.
+6. Produce accepted, rejected, unresolved, and conflict match records with provenance.
+7. Generate publication-to-researcher records and coauthor-pair records, then construct a temporal weighted coauthorship graph with Spark.
+8. Compute researcher collaboration metrics, connected components, communities, bridge measures, path-related data, k-core or equivalent density measures, team-size statistics, and temporal trends with Spark.
+9. Load graph topology and computed researcher properties into Neptune.
+10. Store operational records, match caches, query sessions, selected metric tables, and audit records in DynamoDB.
+11. Store source text and generated researcher or community summaries in ordinary S3 and embeddings plus compact metadata in S3 Vectors.
 12. Optionally promote selected hot records into OpenSearch for hybrid search.
 13. Expose the runtime through independently scalable RESTful microservices.
-14. Execute a multi-agent retrieval and answer workflow.
-15. Return citations, graph paths, scores, uncertainty, and source metadata with every answer.
+14. Execute a multi-agent query workflow that resolves researchers, retrieves graph metrics and paths, retrieves semantic context, verifies evidence, and synthesizes an explanation.
+15. Return stable researcher IDs, publications, coauthor paths, scores, uncertainty, and source metadata with every answer.
 16. Define the complete AWS environment in Terraform.
-17. Build, test, plan, deploy, evaluate, and archive evidence through Jenkins.
+17. Provide source-controlled scripts that reproduce build, validation, Terraform planning, deployment, bounded data processing, smoke testing, experiments, evidence archiving, and cleanup. Optional continuous-integration workflows may invoke these scripts but are not required.
 18. Demonstrate elastic resource provisioning under controlled load.
-19. Preserve reproducibility through manifests, checksums, versioned prompts, immutable image tags, and run ledgers.
+19. Preserve reproducibility through manifests, checksums, versioned prompts, immutable image tags, run ledgers, exact agent definitions, and phase work orders.
 20. Generate every required repository artifact through the controlled Claude Code agentic workflow.
 
 ## Inputs
@@ -116,28 +176,31 @@ The system inputs include:
 - At least three additional open scholarly datasets.
 - A versioned dataset manifest.
 - Dataset-specific schemas and normalization rules.
-- Entity-linking thresholds and matching policies.
+- Researcher and work entity-linking thresholds and matching policies.
+- Coauthorship time-window configuration.
 - A runtime user question.
 - LLM and embedding model identifiers.
-- Graph, vector, ranking, and answer-generation configuration.
-- Terraform environment variables and Jenkins parameters.
+- Graph, vector, path, community, ranking, and answer-generation configuration.
+- Terraform environment variables and source-controlled run-script parameters.
 
 ## Outputs
 
 The system outputs include:
 
-- Normalized publication, author, venue, topic, institution, citation, code, benchmark, and text records.
-- Accepted, rejected, and unresolved entity-link decisions.
+- Normalized publication, researcher, author-mention, venue, topic, institution, and text records.
+- Accepted, rejected, unresolved, and conflict entity-link decisions.
+- Canonical publication-to-researcher authorship records.
+- Temporal weighted coauthorship edges with supporting publication IDs.
 - Partitioned graph node and edge files.
-- Spark analytics tables.
+- Spark researcher-metric, component, community, bridge, k-core, team-size, temporal, and path tables.
 - A Neptune property graph.
-- S3 Vectors indexes and ordinary S3 text objects.
+- S3 Vectors indexes and ordinary S3 source or generated-context objects.
 - DynamoDB operational and audit records.
 - Optional OpenSearch indexes.
 - REST API responses with evidence bundles.
 - CloudWatch logs, metrics, traces, dashboards, and alarms.
 - Elasticity and performance experiment results.
-- A complete agent-generated source repository.
+- A complete agent-generated source repository containing every submitted agent definition and reproducibility work order.
 - A final report, architecture diagrams, runbook, demonstration video, and cleanup evidence.
 
 ## High-level architecture
@@ -174,35 +237,41 @@ Versioned repository with validated deliverables
 ```
 
 ```text
-Open scholarly datasets
+DBLP + open scholarly enrichment datasets
      |
      v
 S3 raw zone
      |
      v
 EMR Hadoop MapReduce
-parse -> normalize -> block -> join -> score -> export
+parse -> normalize -> resolve candidates -> author mentions -> coauthor-pair candidates
      |
      v
 S3 curated zone
      |
      v
 EMR Spark
-build graph -> PageRank -> communities -> topic growth -> reproducibility -> evidence paths
+canonical researchers
+  -> temporal weighted coauthorship graph
+  -> distinct coauthor counts and weighted degree
+  -> team-size statistics
+  -> connected components and path data
+  -> communities, bridge metrics, and k-core
+  -> temporal collaboration summaries
      |
      +----------------------+----------------------+---------------------+
      |                      |                      |                     |
      v                      v                      v                     v
 Neptune                 DynamoDB              S3 Vectors          ordinary S3
-research graph          run and audit state    embeddings          source chunks
+coauthorship graph      run and audit state   semantic context     source records
      |                      |                      |                     |
      +----------------------+-----------+----------+---------------------+
                                         |
                                         v
-                          Runtime Graph-RAG agent workflow
+                          Runtime agentic query workflow
                                         |
                                         v
-                     Evidence-backed research briefing and API
+                     Evidence-backed collaboration explanation and API
 ```
 
 The optional OpenSearch tier sits beside S3 Vectors. It is used only when the team implements and evaluates hybrid lexical and vector search, lower-latency hot retrieval, or faceted aggregation. S3 Vectors remains the durable semantic retrieval tier.
@@ -270,7 +339,7 @@ The following agent set is required. A team may split a role only when it can de
 | `service-engineer` | `modules/services/**`, REST models, routes, health checks, runtime composition | Hadoop and Spark algorithms, Terraform, agent constitution | API tests and `sbt check` |
 | `test-engineer` | Adversarial and cross-module tests under `tests/**` and designated test source trees | Production implementation | Exact pass and fail report; no production edits |
 | `code-reviewer` | No implementation artifacts; review reports only | Any write or edit | Read-only verified verdict |
-| `infra-engineer` | `infra/terraform/**`, `Jenkinsfile`, deployment and smoke-test scripts, optional GitHub workflows | `terraform apply`, live deployment, application source | Format, validate, plan, security scan, human approval |
+| `infra-engineer` | `infra/terraform/**`, deployment, smoke-test, reproduction, cleanup scripts, and optional GitHub workflows | `terraform apply`, live deployment, application source | Format, validate, plan, script syntax checks, security scan, human approval |
 | `deploy-engineer` | Deployment execution reports and release records | Authoring Terraform or deployment scripts | Approved plan, clean tree, smoke tests, rollback gate |
 | `experiment-engineer` | `experiments/**`, `load-tests/**`, experiment manifests, raw result collectors | Altering production algorithms to improve reported results | Reproducible run and immutable raw results |
 | `documentation-engineer` | `README.md`, `docs/**` except `docs/agents.md`, `docs/agent-runs/**`, and `docs/incidents/**`, plus the final report, diagrams, and demo script | Inventing results or changing implementation | Link check, command replay, evidence review |
@@ -333,7 +402,7 @@ Recommended MCP roles include:
 - Terraform provider and resource documentation.
 - AWS documentation lookup.
 
-Agents should not receive direct unrestricted cloud-write tools. The intended write path is reviewed Terraform plus approved Jenkins or deployment scripts. Cloud consoles must not become the undocumented side door where the real architecture lives.
+Agents should not receive direct unrestricted cloud-write tools. The intended write path is reviewed Terraform plus approved source-controlled deployment scripts. Cloud consoles must not become the undocumented side door where the real architecture lives.
 
 ## Required technology stack
 
@@ -355,13 +424,13 @@ Agents should not receive direct unrestricted cloud-write tools. The intended wr
 | Runtime microservices | Amazon ECS Fargate by default; EKS requires justification |
 | Workflow orchestration | AWS Step Functions and Amazon SQS where asynchronous work is needed |
 | Infrastructure as Code | Terraform |
-| CI and CD | Jenkins Pipeline stored as `Jenkinsfile` |
+| Build and deployment automation | Source-controlled scripts; optional GitHub Actions may invoke them |
 | Images | Amazon ECR with immutable Git SHA tags |
 | Secrets | AWS Secrets Manager and AWS KMS |
 | Metrics, logs, and traces | Amazon CloudWatch and OpenTelemetry where practical |
 | Source control | Private GitHub repository |
 
-GitHub Actions may be used for lightweight pull-request checks or scheduled agent maintenance. It does not replace the required Jenkins pipeline.
+GitHub Actions may be used for lightweight pull-request checks or scheduled agent maintenance. They are optional and must call the same source-controlled verification or deployment scripts documented for manual reproducibility.
 
 ## Dataset portfolio
 
@@ -379,6 +448,8 @@ DBLP is the mandatory seed dataset. At least three additional datasets must be u
 | S2ORC | [S2ORC repository](https://github.com/allenai/s2orc) | Machine-readable scientific text for permitted records | DOI, arXiv ID, S2 paper ID, title |
 | Papers with Code historical data | [Papers with Code data repository](https://github.com/paperswithcode/paperswithcode-data) | Paper-to-code, task, method, dataset, and evaluation relationships | arXiv ID, DOI, title, repository URL |
 
+For the collaboration research questions, the recommended minimum enrichment portfolio is DBLP plus OpenAlex, ORCID, and either Crossref or Semantic Scholar. OpenAlex contributes canonical author candidates, institutions, and topics. ORCID provides strong identity evidence where public identifiers are available. Crossref or Semantic Scholar can strengthen work matching and supply additional author or abstract context. OpenCitations, arXiv, S2ORC, and Papers with Code are optional enrichments rather than core requirements for the coauthorship analysis.
+
 The dataset manifest must record actual availability, snapshot dates, licenses, checksums, source size, selected subset, schema, update strategy, and known staleness. A dead endpoint is not a dataset strategy.
 
 ## Required dataset scope
@@ -391,7 +462,7 @@ Recommended minimums are:
 - At least 1,000,000 graph edges in the scale experiment, subject to course budget.
 - At least 10,000 text chunks embedded in S3 Vectors.
 - At least 200 manually reviewed entity-match examples in the evaluation gold set.
-- At least 30 benchmark questions covering influence, lineage, authors, topics, code, and evidence.
+- At least 30 benchmark questions covering coauthor breadth, maximum team size, direct collaboration, shortest paths, components, communities, bridge researchers, temporal change, topics, institutions, and evidence.
 
 A smaller final scale requires instructor approval and a written explanation of the limiting factor.
 
@@ -529,6 +600,32 @@ final case class EvidenceItem(
   provenance: Provenance
 )
 
+final case class CoauthorEdge(
+  researcherA: String,
+  researcherB: String,
+  jointPublicationCount: Long,
+  firstCollaborationYear: Int,
+  lastCollaborationYear: Int,
+  representativeWorkIds: Vector[String],
+  provenance: Provenance
+)
+
+final case class ResearcherMetrics(
+  researcherId: String,
+  publicationCount: Long,
+  distinctCoauthorCount: Long,
+  totalCoauthorOccurrences: Long,
+  averageCoauthorsPerPaper: Double,
+  maximumCoauthorsOnOnePaper: Long,
+  weightedDegree: Double,
+  componentId: String,
+  communityId: Option[String],
+  bridgeScore: Option[Double],
+  coreness: Option[Int],
+  windowStartYear: Int,
+  windowEndYear: Int
+)
+
 final case class AnswerClaim(
   claimId: String,
   text: String,
@@ -538,21 +635,18 @@ final case class AnswerClaim(
 )
 ```
 
-The exact fields may differ, but identifiers, versioning, provenance, uncertainty, and serialization tests are mandatory.
+The exact fields may differ, but identifiers, versioning, provenance, uncertainty, time windows, and serialization tests are mandatory.
 
 ## Research graph model
 
 Required node classes include:
 
-- `Work`
-- `Author`
+- `Researcher`
 - `AuthorMention`
+- `Work`
 - `Venue`
 - `Institution`
 - `Topic`
-- `Repository`
-- `BenchmarkDataset`
-- `Method`
 - `TextChunk`
 - `DatasetSnapshot`
 
@@ -560,15 +654,16 @@ Required edge classes include:
 
 - `AUTHORED`
 - `RESOLVES_TO`
-- `CITES`
+- `COAUTHORED_WITH`
 - `PUBLISHED_IN`
 - `AFFILIATED_WITH`
 - `HAS_TOPIC`
-- `HAS_CODE`
-- `EVALUATED_ON`
-- `USES_METHOD`
 - `DERIVED_FROM`
 - `SUPPORTED_BY`
+
+`COAUTHORED_WITH` is an undirected logical relationship even when the selected storage representation requires a direction. Its properties must include at least `jointPublicationCount`, `firstCollaborationYear`, `lastCollaborationYear`, and supporting work identifiers or a stable pointer to them. Duplicate researcher pairs must be consolidated deterministically.
+
+Researcher nodes or associated metric records must expose the selected time window and the Spark-computed collaboration measures required by the research questions. Citation relationships may be retained as optional enrichment, but citation PageRank is not a required research metric for this version of the project.
 
 Each graph element must carry enough provenance to locate the source dataset record and pipeline run that produced it.
 
@@ -656,7 +751,6 @@ scholarchain/
     runbook.md
     agent-runs/
     incidents/
-  Jenkinsfile
   README.md
 ```
 
@@ -702,6 +796,48 @@ NEXT GATE:
 ```
 
 An agent must never report a command as successful unless it observed the successful output.
+
+## Agent submission and reproducibility requirements
+
+Every submitted agent is part of the graded artifact. The repository must contain the complete agent system used to generate and maintain the project, not a cleaned-up subset prepared after the work is finished.
+
+The submission must include:
+
+- Every file under `.claude/agents/` used during the project.
+- `CLAUDE.md` and `docs/agents.md`.
+- `.claude/settings.json` and every hook under `.claude/hooks/`.
+- Every project command under `.claude/commands/`.
+- `.mcp.json` with secret values omitted and environment-variable names preserved.
+- The exact phase work order for every phase under `docs/agent-runs/phase-NN/prompt.md`.
+- The final agent report for every phase.
+- Reviewer and test-agent reports when they were required.
+- Human ratification records and repair records.
+- The commit hash accepted at each phase.
+- A version record describing the Claude Code client version, model configuration when known, JVM, sbt, Scala, Terraform, AWS CLI, and other tools needed to replay the workflow.
+
+The README must include an agent catalog with one row per submitted subagent. Each row must identify the agent name, purpose, owned artifact paths, tool fence, prerequisites, an exact example orchestrator instruction such as `Use the spark-engineer agent to ...`, the deterministic verification command, and the expected final-report fields. This catalog is required even when several agents are normally invoked only through phase prompts.
+
+The root README must contain a subsection named `Reproducing the agentic workflow`. At minimum it must provide these steps in project-specific form:
+
+```text
+1. Clone the private repository and check out the submitted tag.
+2. Install the documented Claude Code version and all local toolchain prerequisites.
+3. Configure only the required environment variables and authenticated MCP or AWS read access. Never place secrets in the repository.
+4. Start Claude Code from the repository root using the documented `claude` command.
+5. Confirm that CLAUDE.md, docs/agents.md, .claude/settings.json, hooks, MCP configuration, and all submitted subagents are loaded or discoverable.
+6. Run the repository's safe agent-validation command and the documented dangerous-command probe.
+7. For a phase to be replayed, open a fresh Claude Code session or clear the existing session, copy the exact work order from docs/agent-runs/phase-NN/prompt.md, and instruct the orchestrator to use the named owning subagent.
+8. After the owning subagent returns, invoke the test-engineer or code-reviewer exactly when the phase record requires it.
+9. Route BLOCKED-ON findings through the orchestrator to the artifact owner rather than editing another owner's files directly.
+10. Compare the reproduced report, tests, and generated diff with the archived phase evidence. Exact natural-language wording is not expected to be byte-identical, but required artifacts, contracts, tests, safety gates, and observable results must be reproducible.
+11. Use a fresh session before replaying the next phase so that the ratified repository state, not stale conversation context, becomes the next phase's starting point.
+```
+
+The README must also contain at least one bounded reproduction exercise that a grader can execute without rebuilding the entire cloud environment. A suitable exercise is to run the agent validation, replay one small code-generation or test-hardening phase on a branch, run `sbt check`, and compare the resulting report to the archived phase evidence.
+
+If a submitted agent requires an external tool, MCP server, account permission, environment variable, model endpoint, or local executable, the instructions must name it and explain how the grader verifies that it is available. Statements such as `run the agents` are insufficient.
+
+The grader must be able to determine which agent owns any artifact, how that agent is invoked, what it is allowed to change, which deterministic gate checks its work, and how its final report is preserved.
 
 ## Phase 0: plant the seed agent
 
@@ -855,7 +991,7 @@ Create a deterministic Scala 3 multi-project build and empty owned directories.
 
 Why:
 
-The build is executable policy. It determines language versions, dependency boundaries, test scope, packaging, formatting, and the command that every agent and Jenkins stage uses to decide whether the repository is healthy.
+The build is executable policy. It determines language versions, dependency boundaries, test scope, packaging, formatting, and the command that every agent and source-controlled validation script uses to decide whether the repository is healthy.
 
 Use this work order:
 
@@ -920,7 +1056,7 @@ Freeze the shared data and wire contracts before distributed jobs and services d
 
 Why:
 
-A distributed system fails expensively when producers and consumers disagree about identifiers, field meanings, partition keys, nullability, or JSON representation. Contract tests are cheaper than debugging a million malformed records in S3.
+A distributed system fails expensively when producers and consumers disagree about researcher identity, identifiers, pair semantics, field meanings, partition keys, nullability, or JSON representation. Contract tests are cheaper than debugging millions of malformed or incorrectly merged collaboration records in S3.
 
 Use this work order:
 
@@ -936,25 +1072,26 @@ Dataset-engineer work:
 - Scripts must be idempotent and must not download a full corpus by default.
 
 Domain-engineer work:
-- Create immutable Scala domain records for WorkRecord, AuthorMention, CanonicalAuthor, Venue, Institution, Topic, Citation, Repository, BenchmarkDataset, Provenance, MatchDecision, GraphNode, GraphEdge, EvidenceItem, EvidenceBundle, QueryPlan, AnswerClaim, and AnswerResponse.
-- Define stable ID functions.
-- Define enums for source type, match outcome, evidence type, and verification status.
-- Define a configuration loader using environment variables plus versioned HOCON or YAML files. Do not hardcode bucket names, endpoints, thresholds, model IDs, or AWS account IDs.
+- Create immutable Scala domain records for WorkRecord, AuthorMention, CanonicalResearcher, AuthorshipRecord, PublicationTeam, CoauthorPairCandidate, CoauthorEdge, ResearcherMetrics, Venue, Institution, Topic, Provenance, MatchDecision, GraphNode, GraphEdge, EvidenceItem, EvidenceBundle, QueryPlan, AnswerClaim, and AnswerResponse.
+- Define stable researcher, work, edge, evidence, and run ID functions.
+- Define enums for source type, match outcome, evidence type, collaboration metric, query operation, and verification status.
+- Define a configuration loader using environment variables plus versioned HOCON or YAML files. Do not hardcode bucket names, endpoints, thresholds, model IDs, AWS account IDs, graph windows, or bridge-algorithm parameters.
 - Create serialization and schema-version tests.
 - Freeze representative JSON wire examples in contract tests.
-- Add validation that rejects missing provenance, invalid confidence ranges, unsupported schema versions, and malformed stable IDs.
+- Add validation that rejects missing provenance, invalid confidence ranges, unsupported schema versions, malformed stable IDs, invalid undirected pair ordering, and time windows where start year exceeds end year.
 
 Run sbt check.
-Report sample serialized records, the stable ID formulas, configuration precedence, schema versions, and known unresolved dataset questions.
+Report sample serialized records, stable ID formulas, pair canonicalization rule, configuration precedence, schema versions, and known unresolved dataset questions.
 ```
 
 Required stable ID principles:
 
 ```text
 work ID: namespace plus authoritative source ID when available
-canonical DOI work ID: normalized DOI
-chunk ID: hash of work ID, source version, section, ordinal, and text hash
-graph edge ID: hash of edge type, ordered endpoints, policy version, and source evidence
+researcher ID: canonical external identifier when validated, otherwise a versioned ScholarChain identity ID
+coauthor edge ID: hash of canonical ordered researcher IDs plus graph-window and policy version
+chunk or profile ID: hash of entity ID, source version, document type, ordinal when needed, and text hash
+graph edge ID: hash of edge type, canonical endpoints, policy version, and source evidence
 run ID: timestamp-independent unique identifier stored with an immutable run manifest
 ```
 
@@ -964,17 +1101,18 @@ Gate:
 - Wire-format contract tests pass.
 - Dataset manifest validation passes.
 - Sample scripts do not silently fetch large files.
-- The reviewer verifies that no dataset license or source is invented.
+- Pair ordering and time-window tests pass.
+- The reviewer verifies that no dataset license, identifier, or source is invented.
 
 ## Phase 4: implement raw ingestion and Hadoop MapReduce
 
 Purpose:
 
-Create the first required big-data processing stage.
+Create the first required big-data processing stage and prepare the records from which the collaboration graph will be built.
 
 Why:
 
-DBLP XML and external scholarly snapshots contain large numbers of mostly independent records. MapReduce is appropriate for parsing, canonicalization, key-based grouping, blocking, joins, deduplication, counters, and production of partitioned intermediate data.
+DBLP XML and external scholarly snapshots contain large numbers of mostly independent records. MapReduce is appropriate for parsing, canonicalization, key-based grouping, blocking, joins, deduplication, author-mention extraction, and expansion of each publication into candidate coauthor pairs.
 
 Use this work order:
 
@@ -985,72 +1123,78 @@ Required jobs:
 
 1. DBLP record extraction
 - Read complete DBLP publication records without splitting an XML record across mappers.
-- Support article, inproceedings, proceedings, book, incollection, phdthesis, mastersthesis, and www records as present in the selected snapshot.
-- Extract DBLP key, title, authors, year, venue fields, ee links, URLs, and record type.
-- Emit valid normalized WorkRecord JSONL or Parquet-compatible intermediate records.
+- Support the selected DBLP record types present in the chosen snapshot.
+- Extract DBLP key, title, author sequence, year, venue fields, ee links, URLs, and record type.
+- Emit valid normalized WorkRecord and AuthorMention records.
 
 2. External source normalization
 - Implement one normalizer per selected dataset.
 - Map source fields into shared contracts without losing source-specific IDs.
+- Preserve author identifiers, affiliations, topic identifiers, abstracts, and work identifiers when available.
 - Write malformed and unsupported records to versioned reject outputs.
 
 3. Exact identifier extraction and join preparation
-- Normalize DOI and arXiv identifiers.
-- Emit exact-identifier keys and duplicate/conflict counters.
+- Normalize DOI, arXiv, ORCID, OpenAlex, Semantic Scholar, and other selected identifiers.
+- Emit exact-identifier keys and duplicate or conflict counters.
 
-4. Title and author blocking
-- Emit bounded candidate blocks using normalized title shingles, year, author surname and initials, coauthor context, venue, and source.
-- Prevent pathological blocks from overwhelming reducers.
+4. Researcher and work blocking
+- Emit bounded candidate blocks using normalized names, initials, coauthor context, title, year, venue, affiliation, and source.
+- Prevent pathological common-name or title blocks from overwhelming reducers.
 
 5. Candidate feature construction
 - Join records within blocks.
 - Compute deterministic match features.
-- Emit MatchCandidate records, not final guesses hidden inside logs.
+- Emit MatchCandidate records rather than final guesses hidden inside logs.
 
-6. Citation edge preparation
-- Normalize source and target identifiers from citation datasets.
-- Preserve unresolved endpoints for later repair.
+6. Publication team extraction
+- Emit one publication-team record containing the ordered author mentions for every retained work.
+- Emit author-paper records keyed by author mention and work ID.
+- Emit candidate unordered coauthor pairs for every paper with at least two authors.
+- A paper with n authors generates n * (n - 1) / 2 candidate pairs before duplicates are consolidated.
+- Preserve work ID, year, author position, and source provenance on every pair record.
+- Count and report unusually large author teams because they can create quadratic pair expansion.
 
 7. Graph export preparation
-- Emit partitioned node and edge candidate files for Spark.
+- Emit partitioned work, author-mention, team, pair-candidate, topic, institution, and other selected enrichment files for Spark.
 
 Required operational behavior:
-- Hadoop counters for input, accepted, rejected, duplicate, conflict, oversize block, missing key, and schema failure records.
+- Hadoop counters for input, accepted, rejected, duplicate, conflict, oversize block, oversize author team, emitted pair, missing key, and schema failure records.
 - Explicit partition strategy.
 - Idempotent output paths containing run ID and dataset snapshot.
 - No mutable shared state across map or reduce tasks.
 - Compression for intermediate outputs.
 - Deterministic outputs for deterministic inputs.
-- Unit tests for parsers and key functions.
+- Unit tests for parsers, pair generation, normalization, and key functions.
 - Mini-cluster or local integration tests for representative jobs.
 - A bounded EMR smoke-run script owned by the infrastructure workflow, not by this agent.
 
 Run sbt check and the local bounded pipeline.
-Report job graph, mapper and reducer key-value contracts, partition counts, counters, rejected records, output paths, and the largest observed block.
+Report job graph, mapper and reducer key-value contracts, partition counts, counters, rejected records, output paths, maximum observed team size, largest pair expansion, and the largest observed blocking group.
 ```
 
 Required Hadoop data flow:
 
 ```text
-DBLP XML --------------------> DBLP parser --------------------+
-                                                               |
-OpenAlex/Crossref/etc. ------> source normalizers -------------+--> exact-ID join inputs
-                                                               |
-all normalized works --------> blocking-key mappers ------------+--> candidate groups
-                                                               |
-citation sources ------------> citation normalizer ------------+--> citation edge candidates
-                                                               |
-all prepared records ------------------------------------------+--> S3 curated MapReduce output
+DBLP XML --------------------> DBLP parser --------------------------+
+                                                                    |
+OpenAlex/ORCID/etc. ---------> source normalizers ------------------+--> identity-link inputs
+                                                                    |
+publication teams -----------> author-paper and pair expansion -----+--> coauthor pair candidates
+                                                                    |
+all normalized records ------> blocking-key mappers ----------------+--> candidate identity groups
+                                                                    |
+all prepared records -----------------------------------------------+--> S3 curated MapReduce output
 ```
 
 Gate:
 
 - At least two real MapReduce jobs execute, not local collection operations disguised as MapReduce.
 - DBLP parser handles record boundaries correctly.
+- Pair generation passes hand-checkable papers with 1, 2, 3, and larger author lists.
 - Counters and reject outputs are visible.
 - Repeated runs with the same input produce equivalent logical output.
 - Sample results contain provenance.
-- Test engineer adds adversarial XML, Unicode, missing-field, duplicate-ID, and giant-block cases.
+- Test engineer adds adversarial XML, Unicode, missing-field, duplicate-ID, common-name, and giant-team cases.
 - Code reviewer returns APPROVE.
 
 ## Phase 5: implement entity resolution
@@ -1061,7 +1205,7 @@ Resolve records across datasets while preserving uncertainty and auditability.
 
 Why:
 
-A title or author-name match is not identity. Incorrect merging corrupts citation counts, communities, reproducibility results, and every LLM answer downstream. Entity resolution must be treated as an evaluated model, not as a convenient string comparison.
+A title or author-name match is not identity. Incorrectly merging two researchers or splitting one researcher into several identities corrupts coauthor counts, shortest paths, components, communities, bridge scores, team-size attribution, and every LLM answer downstream. Entity resolution must be treated as an evaluated model, not as a convenient string comparison.
 
 Use this work order:
 
@@ -1071,7 +1215,7 @@ Use the entity-resolution-engineer agent to implement the ScholarChain entity-re
 Required behavior:
 - Exact identifier rules for DOI, arXiv ID, ORCID, OpenAlex ID, Semantic Scholar ID, and repository URL.
 - Normalization for Unicode, punctuation, whitespace, title markup, initials, name order, and DOI prefixes.
-- Feature functions for title similarity, author overlap, author order, year distance, venue compatibility, coauthor overlap, affiliation compatibility, citation-neighborhood overlap, and source reliability.
+- Feature functions for researcher-name similarity, initials, author order, coauthor overlap, affiliation compatibility, ORCID or external IDs, title similarity, year distance, venue compatibility, citation-neighborhood evidence when available, and source reliability.
 - A versioned scoring policy.
 - Separate thresholds for accepted, rejected, and unresolved results.
 - Conflict detection when authoritative identifiers disagree.
@@ -1084,7 +1228,7 @@ Required behavior:
 
 Evaluation requirements:
 - At least 200 manually reviewed candidate pairs.
-- Precision, recall, F1, confusion matrix, and coverage.
+- Precision, recall, F1, confusion matrix, and coverage, reported separately for researcher-identity resolution and work resolution when both are implemented.
 - Metrics by match path: exact ID, deterministic bibliographic, probabilistic, and LLM-adjudicated.
 - Error analysis with at least ten false positives and ten false negatives when available.
 - Threshold sensitivity analysis.
@@ -1102,62 +1246,83 @@ Gate:
 - Precision and recall are reported separately, not hidden behind one aggregate score.
 - The reviewer verifies there is no data leakage from evaluation labels into matching logic.
 
-## Phase 6: build the graph and run Spark analytics
+## Phase 6: build the temporal coauthorship graph and run Spark analytics
 
 Purpose:
 
-Convert resolved records and citation candidates into a large graph and compute iterative analytics.
+Convert resolved publication and researcher records into a temporal weighted collaboration graph and compute the measures required by the three research questions.
 
 Why:
 
-Classic MapReduce is effective for the preparation stage, but iterative graph computation and multi-step aggregation are better suited to Spark's execution model.
+MapReduce prepares records and pair candidates. The main research problem, however, requires iterative graph algorithms, repeated aggregations, community computation, path analysis, and temporal comparison. Those operations are better suited to Spark's distributed execution model.
 
 Use this work order:
 
 ```text
-Use the spark-engineer agent to implement the ScholarChain Spark pipeline.
+Use the spark-engineer agent to implement the ScholarChain Spark collaboration-analysis pipeline.
 
 Required jobs:
 
-1. Canonical graph builder
-- Read accepted entity links and normalized records.
-- Construct versioned node and edge tables.
-- Preserve unresolved records without forcing a merge.
-- Remove duplicate edges deterministically.
-- Validate referential integrity.
+1. Canonical researcher and authorship builder
+- Read accepted researcher and work entity links plus Hadoop author-paper outputs.
+- Construct canonical Researcher, Work, AUTHORED, Topic, Institution, and Venue tables.
+- Preserve unresolved author mentions without forcing a merge.
+- Validate that every canonical authorship edge points to existing nodes.
 
-2. Work citation PageRank
-- Compute PageRank or an equivalent influence measure over Work-CITES-Work.
-- Record convergence parameters and iteration count.
+2. Temporal weighted coauthorship graph builder
+- Map Hadoop pair candidates onto canonical researcher IDs.
+- Drop self-pairs created by identity resolution.
+- Canonicalize pair order so each logical undirected pair has one identity.
+- Aggregate duplicate pairs.
+- Store jointPublicationCount, firstCollaborationYear, lastCollaborationYear, and supporting work IDs or a stable pointer to them.
+- Support configurable year windows.
 
-3. Author collaboration components and communities
-- Construct coauthor relationships from canonical authorship.
-- Compute connected components.
-- Compute a documented community method such as label propagation when supported by the selected stack.
+3. Researcher collaboration breadth and team-size statistics
+For each researcher and time window compute:
+- publicationCount P_r
+- distinctCoauthorCount C_r
+- totalCoauthorOccurrences T_r
+- averageCoauthorsPerPaper A_r
+- maximumCoauthorsOnOnePaper M_r
+- weightedDegree W_r
+- the work IDs responsible for M_r
+Keep every component visible. Do not replace these measures with one opaque collaboration score.
 
-4. Bridge-author scoring
-- Compute a score that identifies authors connecting otherwise weakly connected communities.
-- Define and test the formula.
+4. Connected components
+- Compute connected components of the researcher coauthorship graph.
+- Store component ID and component size.
+- Report the fraction of researchers in the largest component and the number of singleton researchers when applicable.
 
-5. Topic growth
-- Aggregate works by topic and time window.
-- Compare recent and historical activity with a documented smoothing rule.
-- Avoid division by zero and tiny-denominator exaggeration.
+5. Researcher connectivity and path support
+- Provide a scalable method for shortest paths between selected researcher pairs.
+- Materialize or cache bounded path evidence for benchmark queries.
+- Where feasible, estimate component-level average path length or effective diameter using sampling or another documented scalable method.
+- Never compute all-pairs shortest paths by collecting the graph on the driver.
 
-6. Citation velocity
-- Compute age-aware recent citation activity from available snapshots.
-- State limitations caused by incomplete or delayed citation data.
+6. Collaboration communities
+- Compute a documented community method appropriate to the selected Spark stack, such as label propagation or another justified algorithm.
+- Store community membership, community size, and cross-community edges.
 
-7. Reproducibility scoring
-- Combine available code, benchmark, open-text, replication, and metadata signals.
-- Keep component scores visible; do not emit only a magical scalar.
+7. Bridge analysis
+- Compute at least one documented bridge measure such as exact or approximate betweenness centrality, cross-community degree, or participation coefficient.
+- Record algorithm parameters and approximation strategy when exact computation is impractical.
+- Report the number of distinct communities directly connected by each selected researcher when derivable.
 
-8. Evidence-path generation
-- Materialize bounded high-value paths such as foundational work -> citing work -> method -> benchmark -> repository.
-- Store path provenance and scores.
+8. K-core or equivalent dense-subgraph measure
+- Compute coreness or a justified alternative that captures whether a researcher is embedded in a dense collaboration structure.
+- Test against small hand-checkable graphs.
 
-9. Export
-- Write partitioned Parquet node, edge, score, and evidence-path tables.
+9. Temporal collaboration analysis
+- Recompute selected metrics over configured time windows or yearly snapshots.
+- Measure changes in distinct coauthors, team sizes, component membership, community membership, and bridge behavior.
+- Do not compare windows with incompatible inclusion rules without stating the limitation.
+
+10. Semantic-context preparation
+- Produce researcher-profile summaries, community summaries, collaboration-path summaries, and selected paper or topic summaries for later embedding.
+- Summaries must be generated from computed data and source records, not invented metrics.
+
+11. Export
+- Write partitioned Parquet node, edge, metric, community, component, path-evidence, and semantic-summary tables.
 - Produce load manifests for Neptune, DynamoDB, S3 Vectors, and ordinary S3.
 
 Operational requirements:
@@ -1168,28 +1333,17 @@ Operational requirements:
 - Make every run reproducible from a run manifest.
 
 Run sbt check, a local or small-cluster Spark integration test, and a bounded EMR Spark run.
-Report stage DAGs, partition counts, shuffle metrics, convergence results, graph counts, rejected integrity violations, and output paths.
+Report stage DAGs, partition counts, shuffle metrics, graph counts, component counts, community counts, metric distributions, path-test results, temporal windows, rejected integrity violations, and output paths.
 ```
-
-Required formulas must be defined in the report. For example, a reproducibility score may use:
-
-```text
-reproducibilityScore =
-  wCode * codeAvailability
-+ wBenchmark * benchmarkEvidence
-+ wOpenText * openTextAvailability
-+ wReplication * independentReplicationEvidence
-+ wMetadata * metadataCompleteness
-```
-
-The weights, component ranges, missing-data behavior, and justification must be explicit.
 
 Gate:
 
-- Spark performs real distributed transformations and iterative analytics.
+- Spark performs real distributed transformations and graph analytics.
 - No complete graph is collected to the driver.
-- PageRank and component outputs pass small known-graph tests.
-- Every aggregate score exposes its components.
+- Distinct coauthor counts and pair weights pass small known-graph tests.
+- Connected components, community assignment behavior, path queries, and k-core or equivalent tests are demonstrated on hand-checkable fixtures.
+- Every bridge measure is defined and its limitations are stated.
+- Time windows are explicit in outputs.
 - Partition and shuffle behavior are documented.
 - Code review returns APPROVE.
 
@@ -1197,7 +1351,7 @@ Gate:
 
 Purpose:
 
-Load each data product into the AWS store designed for its access pattern.
+Load each collaboration data product into the AWS store designed for its access pattern.
 
 Why:
 
@@ -1211,16 +1365,17 @@ Use the storage-engineer agent to implement ports, adapters, loaders, and contra
 Required adapters:
 
 1. Ordinary S3
-- Raw, curated, graph, RAG text, reports, and logs prefixes.
+- Raw, curated, graph, semantic-context, reports, and logs prefixes.
 - Versioned object keys and run manifests.
 - Content hashes and source references.
 
 2. Neptune
-- Bulk loader manifests for nodes and edges.
-- A property-graph schema for works, authors, venues, institutions, topics, repositories, benchmark datasets, methods, and text references.
-- Idempotent identifiers.
-- Parameterized openCypher queries.
-- Read-only runtime query credentials.
+- Bulk loader manifests for Researcher, Work, Venue, Institution, Topic, and selected context nodes.
+- Load AUTHORED, COAUTHORED_WITH, PUBLISHED_IN, AFFILIATED_WITH, HAS_TOPIC, RESOLVES_TO, DERIVED_FROM, and SUPPORTED_BY relationships as required by the implemented graph model.
+- Store coauthor-edge properties including jointPublicationCount, firstCollaborationYear, lastCollaborationYear, selected time window, and evidence pointer.
+- Store researcher collaboration metrics needed for bounded runtime lookup when appropriate.
+- Use idempotent identifiers and parameterized openCypher queries.
+- Give runtime services read-only graph credentials.
 
 3. DynamoDB
 - RunLedger table.
@@ -1228,6 +1383,7 @@ Required adapters:
 - QuerySession table.
 - EvidenceBundle table.
 - ArtifactRegistry table.
+- Optional ResearcherMetricCache table when justified by access patterns.
 - Explicit partition and sort keys.
 - Conditional writes for idempotency.
 - TTL only where data is genuinely disposable.
@@ -1235,8 +1391,8 @@ Required adapters:
 4. S3 Vectors
 - Create and query vector-bucket and index abstractions.
 - Store embeddings with stable vector keys and compact filterable metadata.
-- Store long text in ordinary S3 and keep only references in vector metadata.
-- Support metadata filters for year, source, topic, evidence type, and availability flags when permitted by service limits.
+- Store long text or generated profiles in ordinary S3 and keep only references in vector metadata.
+- Support metadata filters for researcher, year window, source, topic, institution, community, and document type when permitted by service limits.
 - Batch writes, retry transient failures, and record rejected vectors.
 
 5. Optional OpenSearch
@@ -1244,19 +1400,19 @@ Required adapters:
 - Define synchronization from durable S3 and S3 Vectors data.
 - Do not make OpenSearch an undocumented second source of truth.
 
-Required indexes:
+Required vector indexes:
+- researcher-profile-v1
+- collaboration-community-v1
 - paper-abstract-v1
-- scholarly-section-v1
-- evidence-path-v1
-- topic-summary-v1
-- code-benchmark-v1
+- collaboration-path-v1
+- topic-institution-summary-v1
 
 Required tests:
 - Serialization and deserialization.
 - Idempotent reload.
 - Missing and malformed metadata.
 - Duplicate vector keys.
-- Neptune edge endpoint validation.
+- Neptune coauthor-edge endpoint and evidence validation.
 - DynamoDB conditional-write behavior.
 - Local fakes or test containers where possible.
 - Bounded AWS integration tests behind an explicit profile.
@@ -1269,6 +1425,7 @@ Gate:
 
 - Long text is not stuffed into vector metadata.
 - Neptune graph identifiers match Spark output identifiers.
+- COAUTHORED_WITH edges can be traced to supporting work evidence.
 - DynamoDB keys support stated access patterns.
 - Loaders are idempotent.
 - AWS integration tests are bounded and separately enabled.
@@ -1278,11 +1435,11 @@ Gate:
 
 Purpose:
 
-Build durable semantic retrieval indexes from abstracts, scholarly sections, graph evidence paths, topic summaries, and code or benchmark descriptions.
+Build durable semantic retrieval indexes that explain researcher interests, collaboration communities, representative publications, and graph paths while leaving exact graph metrics in deterministic stores.
 
 Why:
 
-Graph traversal answers structural questions. Vector retrieval finds semantically relevant text. The final application needs both.
+Graph traversal answers structural questions exactly. Vector retrieval supplies semantic context about what researchers and communities work on. The final application needs both, but the LLM must never recompute or guess deterministic collaboration metrics from text.
 
 Use this work order:
 
@@ -1292,135 +1449,128 @@ Use the storage-engineer and rag-engineer in separate delegated work orders to b
 Storage-engineer work:
 - Implement a bounded embedding work queue using SQS or a manifest-driven batch design.
 - Implement vector write batches through the S3 Vectors API.
-- Store source text in ordinary S3.
-- Store vector key, source pointer, work ID, year, venue or topic IDs, chunk type, source dataset, model version, text hash, and run ID as compact metadata.
-- Detect and skip unchanged chunks by content hash and embedding model version.
+- Store authoritative source text and generated profile documents in ordinary S3.
+- Store vector key, researcher or community ID, relevant time window, topic or institution IDs, document type, source dataset, model version, text hash, and run ID as compact metadata.
+- Detect and skip unchanged text by content hash and embedding model version.
 - Record failures and retry counts in RunLedger.
 
 Rag-engineer work:
-- Define chunking policies for abstracts, sections, graph paths, topic summaries, and benchmark descriptions.
-- Define maximum and minimum chunk sizes, overlap rules, title injection, and section labeling.
+- Define deterministic rendering templates for researcher profiles, community profiles, collaboration paths, and representative-paper summaries.
+- Define chunking policies for permitted abstracts or longer text when used.
 - Define embedding model versioning.
-- Create retrieval smoke tests with known expected neighbors.
-- Create a compact reranking input format.
+- Create retrieval smoke tests with known expected researcher, topic, or community neighbors.
+- Create a compact semantic-context format for the synthesis agent.
 
 Required indexes:
+- researcher-profile-v1
+- collaboration-community-v1
 - paper-abstract-v1
-- scholarly-section-v1
-- evidence-path-v1
-- topic-summary-v1
-- code-benchmark-v1
+- collaboration-path-v1
+- topic-institution-summary-v1
 
-Run the local contract tests and a bounded AWS ingestion of at least 10,000 chunks.
-Report throughput, rejected records, duplicate handling, query latency samples, index counts, metadata schema, and model version.
+Run the local contract tests and a bounded AWS ingestion of at least 10,000 vectors or an instructor-approved smaller corpus when the selected dataset subset does not produce 10,000 meaningful units.
+Report throughput, rejected records, duplicate handling, query latency samples, index counts, metadata schema, and embedding model version.
 ```
 
 Gate:
 
 - The same vector key cannot silently refer to different text.
 - The embedding model version is stored.
-- Source text can be fetched from the vector result through its ordinary S3 pointer.
+- Source text or generated profile content can be fetched from the vector result through its ordinary S3 pointer.
 - Retrieval smoke tests pass.
+- Exact counts, shortest paths, components, and bridge metrics come from graph or metric stores, not vector similarity.
 - Cost and object counts are reported.
 
-## Phase 9: implement the runtime Graph-RAG agents
+## Phase 9: implement the runtime collaboration-analysis agents
 
 Purpose:
 
-Create the runtime agent workflow that translates a user question into graph and vector retrieval, evidence fusion, answer synthesis, and claim verification.
+Create the runtime agent workflow that translates a user question into researcher resolution, deterministic graph retrieval, path and community analysis, semantic context retrieval, evidence assembly, answer synthesis, and claim verification.
 
 Why:
 
-A single unrestricted LLM call cannot reliably decide how to query Neptune, search vector indexes, interpret computed scores, cite evidence, and verify its own answer. The work must be decomposed into narrow runtime responsibilities with typed contracts.
+A single unrestricted LLM call cannot safely resolve ambiguous researchers, select graph metrics, find coauthor paths, interpret communities, retrieve semantic context, and verify numerical claims. The work must be decomposed into narrow responsibilities with typed contracts.
 
 Use this work order:
 
 ```text
-Use the rag-engineer agent to implement the runtime ScholarChain Graph-RAG workflow.
+Use the rag-engineer agent to implement the runtime ScholarChain collaboration-analysis workflow.
 
 Required runtime agents or stages:
 
 1. QueryPlannerAgent
 - Parse the question into a typed QueryPlan.
-- Extract topic, entity, time, venue, evidence, reproducibility, and ranking constraints.
-- Select required graph and vector retrieval operations from an allowlisted plan vocabulary.
+- Classify requested operations such as researcher ranking, maximum team size, direct coauthors, shortest path, component lookup, community comparison, bridge ranking, temporal comparison, topic filter, institution filter, or semantic explanation.
+- Extract researcher names, time windows, topic, venue, institution, and requested ranking metric.
+- Select only allowlisted graph and vector operations.
 - Never emit arbitrary Cypher or arbitrary AWS operations directly from user text.
 
-2. GraphEvidenceAgent
-- Execute parameterized, allowlisted Neptune query templates.
-- Return graph records and bounded paths with stable IDs and provenance.
+2. ResearcherResolverAgent
+- Resolve user-supplied names to canonical researcher IDs using the entity-resolution outputs.
+- Return multiple candidates when ambiguity remains.
+- Include source identifiers, affiliations, coauthor context, and confidence used for disambiguation.
+- Abstain rather than silently choose the wrong researcher.
 
-3. VectorEvidenceAgent
-- Select one or more S3 Vectors indexes.
-- Generate the query embedding.
-- Apply validated metadata filters.
-- Return top candidates with vector score and source pointer.
+3. CollaborationMetricsAgent
+- Retrieve Spark-computed publication count, distinct coauthor count, total coauthor occurrences, average team size, maximum team size, weighted degree, component, community, bridge measure, coreness, and time window as requested.
+- Return exact stored values with metric version and run ID.
 
-4. Optional HybridEvidenceAgent
-- Query the OpenSearch hot tier when the team implements it.
-- Return lexical and vector components separately.
+4. PathFinderAgent
+- Execute bounded parameterized Neptune query templates for direct collaborators and shortest coauthorship paths between selected researchers.
+- Return researcher IDs, edge weights, supporting publication IDs, years, and provenance for every hop.
+- Enforce depth, result-count, and timeout limits.
 
-5. ReproducibilityAgent
-- Retrieve code, benchmark, dataset, open-text, and replication evidence.
-- Return component scores rather than unsupported labels.
+5. CommunityAnalystAgent
+- Retrieve community membership, community size, cross-community edges, bridge metrics, and selected neighboring communities.
+- Distinguish high direct degree from high structural bridge importance.
 
-6. RankFusionAgent
-- Normalize graph, vector, lexical, recency, influence, reproducibility, and source-reliability signals.
-- Produce a ranked EvidenceBundle.
-- Preserve each component score.
+6. SemanticContextAgent
+- Query the appropriate S3 Vectors indexes for researcher profiles, community summaries, representative-paper abstracts, topic descriptions, and path summaries.
+- Return semantic context with vector scores and source pointers.
+- Never treat vector similarity as proof of a coauthorship edge or numerical graph metric.
 
-7. AnswerSynthesisAgent
-- Generate a concise research briefing from the EvidenceBundle.
+7. EvidenceBuilderAgent
+- Assemble a bounded EvidenceBundle containing canonical researcher IDs, metric records, graph paths, publication support, semantic context, identity-resolution confidence, and source provenance.
+- Keep deterministic graph evidence separate from descriptive semantic context.
+
+8. AnswerSynthesisAgent
+- Generate a concise collaboration analysis from the EvidenceBundle.
 - Create typed AnswerClaim records.
 - Associate every material claim with one or more evidence IDs.
+- Explain the difference between collaboration breadth, collaboration intensity, team size, connectivity, and bridge importance when relevant.
 - State uncertainty and missing evidence.
 
-8. ClaimVerificationAgent
+9. ClaimVerificationAgent
 - Verify that cited evidence exists.
-- Check whether evidence text or graph data supports each claim.
-- Reject unsupported identifiers, titles, authors, numerical values, and causal language.
+- Check every researcher identity, publication title, coauthor count, team-size claim, path hop, community claim, bridge score, time window, and numerical value against the bundle.
 - Return VERIFIED, PARTIALLY_SUPPORTED, UNSUPPORTED, or CONFLICTING.
 
-9. Audit stage
-- Persist QueryPlan, evidence IDs, scores, model and prompt versions, token counts where available, latency, verification result, and answer hash.
+10. Audit stage
+- Persist QueryPlan, resolved researcher IDs, evidence IDs, metric versions, graph-run ID, prompt and model versions, token counts where available, latency, verification result, and answer hash.
 
 Required controls:
 - Version every prompt and JSON schema.
-- Use temperature appropriate for extraction and verification, normally deterministic or near deterministic.
 - Validate every model output before use.
 - Retry malformed structured output only within a bounded policy.
 - Treat retrieved text as untrusted data, not as instructions.
-- Remove or neutralize prompt-injection text from documents.
 - Apply context and token budgets.
-- Require an abstaining answer when evidence is insufficient.
+- Require an abstaining answer when researcher identity or evidence is insufficient.
 - Never expose hidden chain-of-thought.
 
 Run sbt check and the benchmark-query suite.
-Report prompt versions, schemas, allowed plan operations, fusion formula, verification rules, abstention behavior, benchmark results, and known failure modes.
+Report prompt versions, schemas, allowed plan operations, identity-resolution behavior, graph query templates, verification rules, abstention behavior, benchmark results, and known failure modes.
 ```
 
-A recommended fusion formula is:
-
-```text
-finalScore =
-  wGraph * normalizedGraphScore
-+ wVector * normalizedVectorScore
-+ wLexical * normalizedLexicalScore
-+ wInfluence * normalizedInfluenceScore
-+ wRecency * normalizedRecencyScore
-+ wReproducibility * normalizedReproducibilityScore
-+ wReliability * sourceReliabilityScore
-```
-
-The team must define normalization, weights, missing-signal behavior, and tie-breaking. The team must also compare this fusion against graph-only and vector-only baselines.
+There is no required universal ranking formula. When a user asks for researchers with the most distinct coauthors, rank by `C_r`. When the user asks for strongest repeated collaboration, use the documented weighted measure. When the user asks for bridge researchers, use the selected bridge metric. A composite score is allowed only when its components, normalization, weights, missing-data behavior, and reason for use are explicit.
 
 Gate:
 
 - User text cannot become arbitrary database code.
-- Every claim has evidence IDs.
+- Ambiguous researcher names do not silently resolve to one identity.
+- Every numerical and path claim has evidence IDs.
 - Unsupported claims are removed, weakened, or explicitly labeled.
 - Prompt injection tests pass.
-- Retrieval and verification are evaluated separately.
+- Deterministic graph retrieval and semantic retrieval are evaluated separately.
 - Code review returns APPROVE.
 
 ## Phase 10: expose the runtime through RESTful microservices
@@ -1530,11 +1680,11 @@ Required categories:
 - Duplicate and conflicting DOI records.
 - Common author names and reordered author lists.
 - Very large blocking groups.
-- Citation edges with unresolved endpoints.
+- Coauthor edges with unresolved or conflicting researcher endpoints.
 - Empty and disconnected graphs.
-- PageRank known-graph cases.
-- Tiny-denominator topic growth.
-- Missing code or benchmark metadata.
+- Distinct-degree, component, shortest-path, bridge, and k-core known-graph cases.
+- Large-team pair expansion and common-name researcher-resolution cases.
+- Missing topic, institution, abstract, or researcher-profile metadata.
 - Duplicate vector keys and stale model versions.
 - Prompt injection in title, abstract, and full-text chunks.
 - LLM malformed JSON and fabricated identifiers.
@@ -1626,7 +1776,7 @@ Required Terraform modules or equivalent organization:
 - Security groups chained by service role rather than broad CIDR access.
 
 3. Identity and encryption
-- Least-privilege roles for EMR, ECS tasks, Step Functions, Jenkins deployment, loaders, and runtime readers.
+- Least-privilege roles for EMR, ECS tasks, Step Functions, deployment execution, loaders, and runtime readers.
 - Separate runtime and deployment permissions.
 - KMS keys or approved AWS-managed encryption choices.
 - Secrets Manager records referenced by ARN, never secret values in Terraform source or plans.
@@ -1720,107 +1870,88 @@ Gate:
 - Human reviews and signs the plan before any apply.
 - Code reviewer approves the infrastructure diff.
 
-## Phase 13: create the Jenkins CI and CD pipeline
+## Phase 13: create reproducible build, deployment, and experiment automation
 
 Purpose:
 
-Automate validation, packaging, planning, controlled deployment, experiments, and evidence archiving.
+Provide source-controlled commands that reproduce validation, packaging, Terraform planning, deployment, bounded pipeline execution, smoke testing, experiments, evidence archiving, and cleanup without depending on a separately administered CI or CD server.
 
 Why:
 
-A project is not reproducible when its successful deployment depends on a sequence of undocumented commands remembered by one student at 2 AM.
+A project is not reproducible when its successful deployment depends on undocumented commands remembered by one student. The authoritative procedures must live in the repository as inspectable scripts that a grader can run directly.
 
 Use this work order:
 
 ```text
-Use the infra-engineer agent to create the root Jenkinsfile and any supporting Jenkins scripts.
+Use the infra-engineer agent to create or finalize the source-controlled automation under scripts/ and any optional GitHub Actions workflows that call those scripts.
 
-Required stages:
+Required scripts or equivalent commands:
 
-1. Checkout
-- Clean workspace.
-- Record commit SHA and branch.
-
-2. Validate agent constitution
-- Parse .claude/settings.json and .mcp.json.
-- Validate agent frontmatter and unique names.
-- Validate one-writer ownership map.
+1. scripts/check.sh
+- Validate agent constitution files and JSON configuration.
 - Run hook syntax checks.
+- Run scalafmt check, sbt Test/compile, sbt test, contract validation, schema validation, and shell syntax checks.
+- Run Terraform format and validate.
+- Exit nonzero on any failed gate.
 
-3. Static checks
-- scalafmt check.
-- sbt Test/compile.
-- sbt test.
-- Contract and schema validation.
-- Shell syntax checks.
-- Terraform format and validate.
+2. scripts/package.sh
+- Build Hadoop and Spark artifacts.
+- Build required service images.
+- Record checksums and image tags derived from the Git commit SHA.
 
-4. Package distributed jobs
-- Build Hadoop job artifact.
-- Build Spark job artifact.
-- Record checksums.
+3. scripts/plan.sh
+- Run Terraform plan for the selected environment.
+- Record plan file, plan checksum, commit SHA, target account and Region, and a summary of add, change, destroy, IAM, and stateful-resource actions.
+- Never apply automatically.
 
-5. Build microservice images
-- Build every required image.
-- Scan images.
-- Tag by Git SHA.
-- Push only after tests pass.
+4. scripts/deploy.sh
+- Refuse a dirty tree.
+- Require an explicitly approved plan checksum or the documented human-approval mechanism.
+- Apply or invoke the approved deployment path exactly as documented.
+- Record deployed image digests and revisions.
 
-6. Terraform plan
-- Produce and archive a plan.
-- Summarize add, change, destroy, IAM, and stateful-resource changes.
+5. scripts/smoke-test.sh
+- Check health and readiness.
+- Run a bounded researcher query.
+- Fetch evidence for at least one returned claim.
+- Verify idempotency and one expected error path.
 
-7. Human approval
-- Required before apply or deployment.
-- Display environment, cost-relevant resources, plan checksum, and commit SHA.
+6. scripts/run-bounded-pipeline.sh
+- Run or submit the approved bounded Hadoop and Spark pipeline.
+- Record dataset snapshot, run IDs, configuration, and output locations.
 
-8. Deploy
-- Invoke approved scripts.
-- Never reproduce deployment logic inline in Jenkins.
+7. scripts/run-experiment.sh or an equivalent manifest-driven command
+- Execute only approved experiment manifests.
+- Record commit SHA, resource limits, start and end times, Region, and metric locations.
 
-9. Smoke test
-- Health, readiness, basic query, evidence fetch, and idempotency checks.
+8. scripts/archive-evidence.sh
+- Gather test reports, plan checksum, image digests, run manifests, selected CloudWatch metric exports, experiment outputs, and release metadata into a versioned evidence directory or approved S3 prefix.
 
-10. Bounded data pipeline
-- Optional parameterized stage.
-- Starts a bounded EMR run and records run ID.
+9. scripts/cleanup.sh
+- List resources targeted for removal.
+- Require the documented human confirmation for destructive actions.
+- Preserve required state, logs, or final reports according to the cleanup policy.
 
-11. Elasticity and load experiment
-- Optional parameterized stage.
-- Runs approved experiment manifest.
-
-12. Archive evidence
-- Test reports.
-- Plan.
-- Image digests.
-- Dataset and run manifests.
-- CloudWatch metric exports.
-- Experiment outputs.
-- Release report.
-
-13. Cleanup or teardown
-- Separate human-approved job or stage.
-- Never automatic after a failed deploy when it could destroy debugging evidence.
-
-Pipeline requirements:
-- Credentials from Jenkins credential bindings or AWS role federation, never source control.
-- Concurrency controls for deployment environments.
-- Timeouts on cloud stages.
+Automation requirements:
+- Bash strict mode or an equivalently strict scripting language configuration.
+- No secrets in source control or command output.
+- Timeouts on cloud operations.
 - Retry only safe idempotent actions.
-- Post-failure evidence collection.
-- No long-lived AWS keys when role-based access is available.
+- Greppable step markers and explicit exit codes.
+- Commands must work from a clean checkout after documented prerequisites are installed.
+- Optional GitHub Actions may call these scripts, but the scripts remain the authoritative reproducibility interface.
 
-Validate Jenkinsfile syntax using the selected Jenkins method and run at least one complete non-production pipeline.
-Report stages, parameters, credentials by name, approval points, artifacts archived, and rollback behavior.
+Run every non-destructive script in the bounded non-production environment.
+Report command lines, required environment variables by name, human approval points, generated evidence, and rollback behavior.
 ```
 
 Gate:
 
-- A clean checkout can run all non-cloud validation.
-- The pipeline cannot deploy before tests and approval.
-- The plan checksum is tied to the approved deployment.
-- Failed smoke tests trigger rollback or stop according to documented policy.
-- Archived evidence identifies commit and run IDs.
+- A clean checkout can run all non-cloud validation through the documented script.
+- Terraform planning is reproducible and the plan checksum is archived.
+- Deployment cannot proceed without the documented human approval.
+- Smoke tests exercise a real bounded collaboration query.
+- The same scripts are used in the README reproduction instructions and final demonstration.
 
 ## Phase 14: apply and deploy through human approval
 
@@ -1838,7 +1969,7 @@ Before starting:
 - Human confirms the target AWS account and Region.
 - Human confirms cost bounds.
 - Human confirms no unexplained destroy or replacement.
-- Human approves Jenkins deployment or manually runs the approved apply command.
+- Human approves the documented deployment command and approved Terraform apply path.
 
 Use this work order after approval:
 
@@ -1848,7 +1979,7 @@ Use the deploy-engineer agent to deploy the exact approved ScholarChain commit a
 Requirements:
 - Refuse a dirty working tree.
 - Record commit SHA, plan checksum, target account, Region, and environment.
-- Execute only approved deployment scripts or Jenkins stages.
+- Execute only approved source-controlled deployment scripts.
 - Do not edit Terraform, scripts, or application source.
 - Wait for service stabilization with a bounded timeout.
 - Verify deployed image digests and task revisions.
@@ -1958,7 +2089,7 @@ Required evaluation groups:
 - Precision, recall, F1, confusion matrix, coverage, unresolved rate, and metrics by matching path.
 
 2. Graph correctness
-- Referential integrity, duplicate rate, orphan rate, known small-graph algorithm tests, and sampled provenance audit.
+- Referential integrity, duplicate rate, orphan rate, coauthor-edge support rate, known small-graph degree, component, path, community, bridge, and k-core tests, and sampled provenance audit.
 
 3. Retrieval
 - Recall at K.
@@ -1970,7 +2101,7 @@ Required evaluation groups:
 
 4. Answer quality
 - Claim support rate.
-- Citation validity.
+- Coauthor-edge, graph-path, and supporting-publication validity.
 - Identifier and numerical accuracy.
 - Contradiction rate.
 - Abstention quality.
@@ -2099,11 +2230,14 @@ J05 BlockingKeyJob
 J06 CandidateJoinJob
   blocks -> MatchCandidate feature records
 
-J07 CitationNormalizeJob
-  source citations -> normalized citation endpoints
+J07 PublicationTeamJob
+  normalized DBLP works -> author-paper records and publication-team records
 
-J08 GraphCandidateExportJob
-  normalized records and match decisions -> node and edge candidates
+J08 CoauthorPairExpansionJob
+  publication teams -> unordered coauthor pair candidates with work and year provenance
+
+J09 GraphCandidateExportJob
+  normalized records, match decisions, authorship, and pair candidates -> Spark-ready collaboration inputs
 ```
 
 The DBLP XML reader must not assume that arbitrary byte splits align with publication elements. Students may implement or adapt an XML input format that synchronizes on complete top-level records. The parser must be tested against entity declarations, multiline titles, Unicode, missing optional fields, repeated authors, and records near split boundaries.
@@ -2112,12 +2246,13 @@ A giant reducer group is a correctness and availability risk. The blocking desig
 
 ## Detailed Spark requirements
 
-The Spark pipeline must consume Hadoop outputs rather than independently reparse all raw data. This preserves the intended chained workflow.
+The Spark pipeline must consume Hadoop outputs rather than independently reparse all raw data. This preserves the intended chained workflow and makes the coauthorship graph traceable to the publication-team records produced by MapReduce.
 
 For each Spark job, document:
 
 - Input tables and schema versions.
 - Output tables and schema versions.
+- Selected time window or snapshot.
 - Partition columns.
 - Repartition and coalesce operations.
 - Join strategies.
@@ -2133,60 +2268,62 @@ Recommended output layout:
 ```text
 s3://scholarchain-curated/
   works/snapshot=.../run_id=.../
-  authors/snapshot=.../run_id=.../
+  author-mentions/snapshot=.../run_id=.../
+  researchers/snapshot=.../run_id=.../
+  authorship/snapshot=.../run_id=.../
+  coauthor-pair-candidates/snapshot=.../run_id=.../
   match-decisions/policy=.../run_id=.../
-  citations/snapshot=.../run_id=.../
 
 s3://scholarchain-graph/
+  nodes/type=researcher/run_id=.../
   nodes/type=work/run_id=.../
-  nodes/type=author/run_id=.../
   nodes/type=topic/run_id=.../
   edges/type=authored/run_id=.../
-  edges/type=cites/run_id=.../
+  edges/type=coauthored_with/run_id=.../
   edges/type=has_topic/run_id=.../
-  edges/type=has_code/run_id=.../
-  scores/type=pagerank/run_id=.../
-  scores/type=topic_growth/run_id=.../
-  scores/type=reproducibility/run_id=.../
-  evidence-paths/run_id=.../
+  metrics/type=researcher_collaboration/window=.../run_id=.../
+  metrics/type=components/window=.../run_id=.../
+  metrics/type=communities/window=.../run_id=.../
+  metrics/type=bridges/window=.../run_id=.../
+  metrics/type=kcore/window=.../run_id=.../
+  path-evidence/window=.../run_id=.../
+  semantic-summaries/window=.../run_id=.../
 ```
 
-The team must include at least one small graph whose PageRank, connected components, and bridge behavior can be checked by hand. A billion-edge result is not trustworthy merely because it took a long time to compute.
+The team must include at least one small graph whose distinct degree, weighted degree, connected components, shortest paths, community behavior, bridge behavior, and k-core or equivalent result can be checked by hand. A billion-edge result is not trustworthy merely because it took a long time to compute.
 
 ## S3 Vectors design
 
-Amazon S3 Vectors is the default durable semantic retrieval tier for ScholarChain. The project must use vector buckets and indexes through the current AWS API and Terraform provider support available when the project is implemented. Students must verify current Region availability and limits from the [Amazon S3 Vectors documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html) and record the values actually used in `docs/service-limits.md`.
+Amazon S3 Vectors is the default durable semantic retrieval tier for ScholarChain. The vector store supplies semantic context for researchers and collaboration communities. It does not replace the exact coauthorship graph or Spark-computed metrics.
 
 Recommended vector indexes are:
 
 | Index | Stored semantic unit | Typical filter fields |
 |---|---|---|
-| `paper-abstract-v1` | One abstract or compact paper summary | year, venue, topic, source, work ID |
-| `scholarly-section-v1` | A section or paragraph group from permitted scholarly text | year, section type, topic, source, work ID |
-| `evidence-path-v1` | Natural-language rendering of a graph path | path type, topic, start work, end work |
-| `topic-summary-v1` | Spark-generated topic and community summaries | topic ID, period, community ID |
-| `code-benchmark-v1` | Code, method, task, dataset, and benchmark descriptions | has code, has benchmark, task, method |
+| `researcher-profile-v1` | Generated profile from representative papers, topics, institutions, years, and collaboration statistics | researcher ID, period, topic, institution |
+| `collaboration-community-v1` | Generated community description from member topics, institutions, representative works, and aggregate graph statistics | community ID, period, dominant topic |
+| `paper-abstract-v1` | One permitted abstract or compact paper summary | year, venue, topic, source, work ID |
+| `collaboration-path-v1` | Natural-language rendering of a verified coauthor path | start researcher, end researcher, path length, period |
+| `topic-institution-summary-v1` | Topic and institution summaries used to explain cross-community context | topic ID, institution ID, period |
 
 Example vector metadata:
 
 ```json
 {
-  "workId": "doi:10.1234/example",
-  "sourceDataset": "s2orc",
-  "snapshot": "2026-08-01",
-  "year": 2025,
-  "chunkType": "method-section",
+  "researcherId": "openalex:A123",
+  "documentType": "researcher-profile",
+  "windowStartYear": 2015,
+  "windowEndYear": 2026,
   "topicId": "openalex:T123",
-  "hasCode": true,
-  "hasBenchmark": true,
-  "textS3Uri": "s3://scholarchain-rag/chunks/ab/cd/chunk.json",
+  "institutionId": "ror:example",
+  "textS3Uri": "s3://scholarchain-rag/profiles/researcher/A123.json",
   "textHash": "sha256:...",
   "embeddingModel": "model-id-and-version",
   "runId": "run-..."
 }
 ```
 
-Do not store a full abstract or paper section as vector metadata when an S3 pointer is sufficient. Metadata should support filtering, provenance, and source retrieval. Ordinary S3 remains the authoritative text store.
+Do not store long source text as vector metadata when an S3 pointer is sufficient. Metadata should support filtering, provenance, and source retrieval. Ordinary S3 remains the authoritative text store. Exact collaboration counts, edge weights, communities, path hops, and bridge scores must come from Neptune, DynamoDB, or Spark outputs, not from vector similarity.
 
 ## Optional OpenSearch tier
 
@@ -2223,32 +2360,30 @@ Query API
   v
 QueryPlannerAgent
   |
-  +--------------------+----------------------+---------------------+
-  |                    |                      |                     |
-  v                    v                      v                     v
-Graph Retriever    Vector Retriever     Hybrid Retriever      Reproducibility
-  |                    |                  optional               Evidence
-  +--------------------+----------------------+---------------------+
-                                       |
-                                       v
-                                 Rank Fusion
-                                       |
-                                       v
-                                Evidence Builder
-                                       |
-                                       v
-                              Answer Synthesis Agent
-                                       |
-                                       v
-                              Claim Verification Agent
-                                       |
-                         +-------------+-------------+
-                         |                           |
-                         v                           v
-                    Answer API                  Audit Service
+  v
+ResearcherResolverAgent
+  |
+  +----------------------+----------------------+----------------------+
+  |                      |                      |                      |
+  v                      v                      v                      v
+CollaborationMetrics   PathFinderAgent     CommunityAnalystAgent   SemanticContextAgent
+  |                      |                      |                      |
+  +----------------------+-----------+----------+----------------------+
+                                     |
+                                     v
+                           EvidenceBuilderAgent
+                                     |
+                                     v
+                           AnswerSynthesisAgent
+                                     |
+                                     v
+                           ClaimVerificationAgent
+                                     |
+                                     v
+                              Query Audit Store
 ```
 
-A Step Functions state machine should represent long-running or asynchronous execution. SQS should buffer embedding and other naturally queued work. A synchronous API call may execute a bounded fast path, but it must switch to an asynchronous job when its graph expansion, retrieval fan-out, or LLM work exceeds configured limits.
+The deterministic graph services are authoritative for counts, path hops, components, communities, and bridge metrics. The semantic context service explains topics, institutions, and representative work. The synthesis agent may interpret these results but may not alter them.
 
 ## REST API contract
 
@@ -2260,19 +2395,25 @@ Request:
 
 ```json
 {
-  "question": "Which distributed systems security topics have grown since 2022 and have reproducible evidence?",
+  "question": "Which researchers have the most distinct coauthors in distributed systems since 2015, which of them participated in the largest author teams, and which are the strongest bridges between collaboration communities?",
   "constraints": {
-    "yearFrom": 2022,
+    "yearFrom": 2015,
     "yearTo": 2026,
-    "venues": [],
-    "mustHaveCode": false,
-    "mustHaveBenchmark": false
+    "topics": ["distributed systems"],
+    "institutions": [],
+    "venues": []
+  },
+  "analysis": {
+    "rankingMetric": "DISTINCT_COAUTHOR_COUNT",
+    "includeTeamSize": true,
+    "includeBridgeMetrics": true,
+    "includeCommunities": true,
+    "includePaths": true
   },
   "retrieval": {
-    "mode": "fused",
     "graphLimit": 100,
-    "vectorLimit": 50,
-    "answerPaperLimit": 15
+    "vectorLimit": 30,
+    "maxPathDepth": 6
   },
   "output": {
     "includeEvidence": true,
@@ -2290,11 +2431,19 @@ Synchronous response:
   "mode": "synchronous",
   "answer": {
     "summary": "...",
-    "directions": [
+    "researchers": [
       {
-        "name": "confidential computing for distributed data processing",
-        "explanation": "...",
-        "representativeWorkIds": ["doi:...", "openalex:..."],
+        "researcherId": "openalex:A123",
+        "displayName": "Example Researcher",
+        "publicationCount": 87,
+        "distinctCoauthorCount": 142,
+        "weightedDegree": 211,
+        "averageCoauthorsPerPaper": 4.6,
+        "maximumCoauthorsOnOnePaper": 28,
+        "maximumTeamWorkIds": ["dblp:conf/example/Example2024"],
+        "componentId": "cc-1",
+        "communityId": "community-17",
+        "bridgeMetric": {"name": "approxBetweenness", "value": 0.812},
         "claimIds": ["claim-1", "claim-2"]
       }
     ]
@@ -2302,10 +2451,10 @@ Synchronous response:
   "claims": [
     {
       "claimId": "claim-1",
-      "text": "Publication activity increased after 2022 in the selected corpus.",
-      "evidenceIds": ["ev-topic-17", "ev-work-33"],
+      "text": "The researcher has 142 distinct coauthors in the selected 2015 to 2026 window.",
+      "evidenceIds": ["ev-metric-17"],
       "verificationStatus": "VERIFIED",
-      "uncertainty": "Coverage depends on the selected dataset snapshots."
+      "uncertainty": "The value depends on the submitted researcher-identity resolution policy and dataset snapshots."
     }
   ],
   "links": {
@@ -2375,7 +2524,7 @@ Parameters:
 direction=in|out|both
 depth=1..3
 limit=1..200
-edgeTypes=CITES,AUTHORED,HAS_TOPIC,HAS_CODE,EVALUATED_ON
+edgeTypes=COAUTHORED_WITH,AUTHORED,HAS_TOPIC,AFFILIATED_WITH,PUBLISHED_IN
 ```
 
 The server must reject unbounded graph exploration.
@@ -2433,47 +2582,49 @@ Example:
 User question:
 
 ```text
-Which graph neural network research directions since 2021 appear influential and reproducible, and what citation lineage supports them?
+Which researchers have the most distinct coauthors in distributed systems since 2015, and which of them are the strongest bridges between otherwise separate collaboration communities?
 ```
 
 The runtime performs these steps:
 
-1. QueryPlannerAgent extracts the topic, date range, influence requirement, reproducibility requirement, and lineage requirement.
-2. GraphEvidenceAgent finds works connected to graph neural network topics, their citation neighborhoods, authors, venues, code, and benchmarks.
-3. VectorEvidenceAgent retrieves semantically relevant abstracts, methods sections, benchmark descriptions, and graph-path summaries.
-4. ReproducibilityAgent collects code and benchmark components and reports missing evidence.
-5. RankFusionAgent combines normalized graph, vector, recency, influence, and reproducibility signals.
-6. EvidenceBuilder creates a bounded evidence bundle.
-7. AnswerSynthesisAgent produces candidate claims.
-8. ClaimVerificationAgent checks every title, identifier, author, number, and relationship against the bundle.
-9. Unsupported claims are removed or marked uncertain.
-10. Audit Service stores the complete observable derivation.
+1. QueryPlannerAgent identifies a researcher-ranking request with a 2015 to 2026 time window, a distributed-systems topic constraint, distinct-coauthor ranking, and bridge comparison.
+2. ResearcherResolverAgent resolves any explicitly named researchers and validates canonical identities used by the retrieved rankings.
+3. CollaborationMetricsAgent retrieves `P_r`, `C_r`, `T_r`, `A_r`, `M_r`, weighted degree, component, community, bridge metric, and coreness for the selected window.
+4. PathFinderAgent retrieves bounded supporting coauthor paths and publication evidence for selected bridge claims.
+5. CommunityAnalystAgent retrieves community sizes, cross-community links, and the evidence explaining why a researcher has high structural bridge importance.
+6. SemanticContextAgent retrieves researcher and community profiles plus representative paper or topic summaries from S3 Vectors.
+7. EvidenceBuilderAgent creates a bounded evidence bundle that keeps graph facts separate from semantic descriptions.
+8. AnswerSynthesisAgent explains the difference between direct collaboration breadth and structural bridge importance.
+9. ClaimVerificationAgent checks every name, count, metric, path hop, publication, and time window against the evidence bundle.
+10. Unsupported claims are removed or marked uncertain, and the audit service stores the observable derivation.
 
 An acceptable final answer structure is:
 
 ```text
-Direction 1: Scalable graph transformers
+Researcher 1
+- Distinct coauthors in selected window: 142
+- Publications: 87
+- Average coauthors per paper: 4.6
+- Maximum coauthors on one paper: 28
+- Weighted collaboration degree: 211
+- Collaboration community: 17
+- Bridge metric: approximate betweenness 0.812
+- Interpretation: broad collaboration network and strong cross-community position
+- Evidence: metric record M17, coauthor edges E1 through E4, representative works W2 and W9
 
-Evidence summary:
-- Topic growth score: 0.81 for the selected snapshots.
-- Representative works: W1, W2, W3.
-- Citation lineage: W0 -> W1 -> W2.
-- Code evidence: repositories linked for W1 and W2.
-- Benchmark evidence: benchmark records linked for W2.
-- Uncertainty: citation coverage differs across OpenAlex and OpenCitations snapshots.
-
-Direction 2: Heterogeneous and temporal graph learning
-
-Evidence summary:
-- Topic growth score: 0.74.
-- Representative works: W4, W5.
-- Citation lineage: W3 -> W4 -> W5.
-- Code evidence: available for W4; not located for W5.
-- Benchmark evidence: two benchmark datasets recorded.
-- Uncertainty: author resolution for one common surname remains unresolved.
+Researcher 2
+- Distinct coauthors in selected window: 168
+- Publications: 91
+- Average coauthors per paper: 6.1
+- Maximum coauthors on one paper: 41
+- Weighted collaboration degree: 259
+- Collaboration community: 23
+- Bridge metric: approximate betweenness 0.311
+- Interpretation: larger direct collaboration network than Researcher 1, but weaker structural bridge position because most collaborators lie in the same dense community
+- Evidence: metric record M22, community record C23, representative works W11 and W19
 ```
 
-The actual answer must use real records from the deployed corpus. Placeholder papers in documentation must be clearly labeled as examples.
+The numbers above are illustrative placeholders for the API format. The submitted system must return real values from its deployed corpus and label every example in documentation that does not come from an actual run.
 
 ## Configuration
 
@@ -2498,11 +2649,11 @@ neptune:
 s3Vectors:
   vectorBucket: "${VECTOR_BUCKET}"
   indexes:
+    researchers: "researcher-profile-v1"
+    communities: "collaboration-community-v1"
     abstracts: "paper-abstract-v1"
-    sections: "scholarly-section-v1"
-    paths: "evidence-path-v1"
-    topics: "topic-summary-v1"
-    codeBenchmarks: "code-benchmark-v1"
+    paths: "collaboration-path-v1"
+    topicInstitutions: "topic-institution-summary-v1"
 
 entityResolution:
   policyVersion: "er-v1"
@@ -2549,7 +2700,6 @@ Required metrics include:
 - Claim verification status counts.
 - Evidence-bundle size.
 - Answer abstention rate.
-- Jenkins stage duration and failure count.
 
 The final dashboard must make at least one elasticity run understandable without opening raw logs.
 
@@ -2557,11 +2707,11 @@ The final dashboard must make at least one elasticity run understandable without
 
 The threat model must cover at least:
 
-- Prompt injection in paper titles, abstracts, full text, repository descriptions, and benchmark text.
+- Prompt injection in paper titles, abstracts, full text, institution descriptions, topic summaries, and generated profile text.
 - Data poisoning through malicious or erroneous source records.
-- Fabricated identifiers and citation links.
+- Fabricated researcher identifiers, publication identifiers, coauthorship edges, and path links.
 - Over-permissioned IAM roles.
-- Secret exposure in logs, prompts, Terraform state, Jenkins output, or Git history.
+- Secret exposure in logs, prompts, Terraform state, deployment-script output, or Git history.
 - Unbounded graph queries.
 - LLM cost exhaustion.
 - Queue flooding.
@@ -2580,7 +2730,7 @@ Required controls include:
 - Least-privilege IAM roles.
 - Separate deployment and runtime roles.
 - Encryption in transit and at rest.
-- Secrets Manager and Jenkins credential bindings.
+- Secrets Manager and role-based or environment-scoped credential injection.
 - Immutable image tags.
 - CloudTrail or equivalent account audit where available.
 - Versioned prompts and model identifiers.
@@ -2613,7 +2763,7 @@ The submission must include every deliverable below. A link in the README should
 | ID | Deliverable | Minimum contents |
 |---|---|---|
 | D01 | Private Git repository | Complete source, history, tags, and instructor access |
-| D02 | Agentic constitution | `CLAUDE.md`, `docs/agents.md`, all agent files, settings, hooks, commands, and MCP configuration |
+| D02 | Agentic constitution | `CLAUDE.md`, `docs/agents.md`, every `.claude/agents/*.md` file used in the project, settings, hooks, commands, MCP configuration, tool-version record, and instructions for invoking every agent |
 | D03 | Agent run evidence | Phase prompts, final reports, human gates, repair records, and commit hashes |
 | D04 | Deterministic build | Multi-project sbt build, format rules, pinned versions, and `sbt check` |
 | D05 | Dataset package | Manifest, schemas, samples, license notes, checksums, and bounded retrieval scripts |
@@ -2621,10 +2771,10 @@ The submission must include every deliverable below. A link in the README should
 | D07 | Entity-resolution package | Features, policy, thresholds, LLM adjudication schema, gold set, and evaluation |
 | D08 | Spark package | Graph builder, analytics, tests, output schemas, and bounded run results |
 | D09 | Storage package | S3, Neptune, DynamoDB, S3 Vectors, and optional OpenSearch adapters and loaders |
-| D10 | Runtime Graph-RAG package | Query planning, graph and vector retrieval, fusion, synthesis, verification, prompts, and tests |
+| D10 | Runtime collaboration-analysis package | Query planning, graph and vector retrieval, fusion, synthesis, verification, prompts, and tests |
 | D11 | Microservices package | REST services, API contract, health checks, authentication, and tests |
 | D12 | Terraform package | Complete IaC, environment configuration, validation, plan, and security scan results |
-| D13 | Jenkins package | `Jenkinsfile`, support scripts, pipeline evidence, and archived artifacts |
+| D13 | Reproducibility automation package | Source-controlled check, package, plan, deploy, smoke-test, bounded-pipeline, experiment, evidence-archive, and cleanup scripts plus optional CI workflow evidence |
 | D14 | Deployment package | Release manifest, image digests, deployed revisions, smoke tests, and rollback evidence |
 | D15 | Experiment package | Manifests, load generators, raw metrics, derived plots, elasticity evidence, and failure run |
 | D16 | Evaluation package | Entity, graph, retrieval, answer, performance, factory, and reproducibility evaluations |
@@ -2673,7 +2823,7 @@ A baseline submission must satisfy all of the following:
 - DBLP plus at least three additional datasets are represented in the manifest and actual bounded pipeline.
 - Hadoop MapReduce parses and normalizes real records.
 - Entity resolution produces evaluated decisions.
-- Spark creates a graph and computes at least PageRank, connected components, topic growth, and one reproducibility-related score.
+- Spark creates the coauthorship graph and computes at least distinct coauthor count, weighted degree, team-size statistics, connected components, communities, one bridge measure, and k-core or a justified equivalent.
 - Neptune stores and answers graph queries.
 - DynamoDB stores run or query state.
 - S3 Vectors stores and retrieves real embeddings.
@@ -2681,7 +2831,7 @@ A baseline submission must satisfy all of the following:
 - A runtime query produces an answer with evidence IDs.
 - Unsupported claims are rejected or labeled.
 - Terraform creates the required environment or a documented instructor-approved subset.
-- Jenkins performs build, test, plan, deploy gating, smoke testing, and artifact archiving.
+- Source-controlled scripts reproduce build, test, Terraform planning, approved deployment, smoke testing, bounded data processing, experiment execution, evidence archiving, and cleanup.
 - At least one elastic scale-out and scale-in event is measured.
 - The README contains reproducible commands.
 - The final report explains design decisions, results, failures, costs, and limitations.
@@ -2702,7 +2852,7 @@ The core grade is zero when the central application is absent or nonfunctional. 
 8. Runtime services execute a graph plus vector RAG workflow.
 9. The LLM returns evidence-backed claims.
 10. Terraform defines the deployed environment.
-11. Jenkins automates the delivery process.
+11. Source-controlled automation reproduces validation, planning, deployment, bounded pipeline execution, smoke testing, experiment execution, evidence archiving, and cleanup.
 12. Elastic behavior is instrumented and demonstrated.
 13. The controlled reference-style agentic workflow generates and validates the deliverables.
 14. The project can be built and explained by the submitting student or team.
@@ -2712,20 +2862,20 @@ The core grade is zero when the central application is absent or nonfunctional. 
 The final report should use coherent paragraphs and include at least these sections:
 
 1. Problem and motivation.
-2. Research question classes supported.
+2. The three collaboration research questions and required metrics.
 3. Dataset selection and licenses.
 4. Agentic software factory architecture.
 5. Authority and ownership design.
 6. Human gates and repair loops.
 7. Hadoop pipeline.
 8. Entity-resolution method and evaluation.
-9. Spark graph and analytics.
+9. Spark coauthorship graph, collaboration metrics, paths, communities, bridge analysis, and temporal analytics.
 10. Storage architecture.
 11. S3 Vectors and optional OpenSearch design.
-12. Runtime Graph-RAG agents.
+12. Runtime collaboration-analysis agents.
 13. Microservice architecture and API.
 14. Terraform architecture.
-15. Jenkins delivery pipeline.
+15. Build, deployment, experiment, and reproduction automation.
 16. Security and threat model.
 17. Elasticity experiments.
 18. Retrieval and answer evaluation.
@@ -2759,7 +2909,7 @@ The final demonstration must show the following without relying only on prerecor
 14. A complete user query through the API.
 15. Evidence and explain endpoints for the answer.
 16. Claim verification behavior, including one unsupported claim test.
-17. Jenkins pipeline stages.
+17. Reproduction scripts, agent replay instructions, and a clean-checkout bounded run.
 18. Terraform plan or deployed-resource evidence.
 19. CloudWatch elasticity dashboard.
 20. Scale-out and scale-in evidence.
@@ -2776,7 +2926,7 @@ Course discussion is encouraged. Students may discuss:
 - Library and service documentation.
 - General Hadoop and Spark debugging techniques.
 - General Claude Code configuration and hook behavior.
-- Generic Terraform and Jenkins issues.
+- Generic Terraform and deployment-automation issues.
 - Public dataset availability and license information.
 - General methods for measuring retrieval and elasticity.
 
@@ -2840,7 +2990,7 @@ The root `README.md` must include:
 - Exact commands for formatting, compiling, testing, and packaging.
 - Exact command for the bounded local or cloud sample.
 - Exact Terraform format, validate, and plan commands.
-- Exact Jenkins setup assumptions and job parameters.
+- Exact source-controlled automation commands and required environment-variable names.
 - Deployment and smoke-test commands.
 - API query examples.
 - Experiment reproduction commands.
@@ -2853,10 +3003,16 @@ The commands must work from the repository root unless the README explicitly cha
 
 ## Submission logistics
 
-The instructor will announce the deadline and submission channel. The submission should include:
+Submission deadline: Wednesday, November 25, 2026 at 11PM CST.
+
+The submission should include:
 
 - URL of the private repository.
-- Final tag and commit SHA.
+- Final tag and commit SHA created before the deadline.
+- Every agent definition used by the project under `.claude/agents/`.
+- `CLAUDE.md`, `docs/agents.md`, `.claude/settings.json`, all hooks, all project commands, and `.mcp.json` with no secret values.
+- Detailed `Reproducing the agentic workflow` instructions in the README, including how to start Claude Code, validate the agent system, invoke each required agent through the orchestrator, replay at least one bounded phase, run test and review gates, and compare reproduced evidence with the archived run.
+- Phase prompts, agent reports, test reports, review reports, human gates, repair records, and accepted commit hashes under `docs/agent-runs/`.
 - Link to the demonstration video.
 - Link to the deployed application when the deployment is still available.
 - Link to the final report.
@@ -2864,65 +3020,68 @@ The instructor will announce the deadline and submission channel. The submission
 - Resource inventory and planned cleanup date.
 - Any instructor-approved deviations.
 
-Only the latest commit or tag created before the deadline will be graded unless the instructor states otherwise. A late commit does not become timely because an agent started generating it earlier.
+Only the latest commit or submitted tag created before Wednesday, November 25, 2026 at 11PM CST will be graded unless the instructor states otherwise. A late commit does not become timely because an agent started generating it earlier.
 
 ## Evaluation rubric
 
-The project is evaluated on 100 points. The instructor may adjust weights before the project starts.
+The project is evaluated on 20 points.
 
 | Category | Points | Full-credit evidence |
 |---|---:|---|
-| Agentic factory and control model | 14 | Correct orchestrator and subagent model, ownership, hooks, permissions, reports, repair loops, and human gates |
-| Dataset engineering | 8 | DBLP plus at least three real linked datasets, manifest, licenses, checksums, schemas, and bounded scripts |
-| Hadoop MapReduce | 10 | Correct distributed parsing, normalization, blocking, joins, counters, rejects, tests, and EMR run |
-| Entity resolution | 8 | Evidence hierarchy, uncertainty, versioned policy, LLM abstention, gold set, metrics, and error analysis |
-| Spark graph analytics | 10 | Correct graph construction, PageRank, communities or components, topic growth, reproducibility, paths, and distributed execution |
-| Storage architecture | 9 | Correct S3, Neptune, DynamoDB, S3 Vectors, provenance, idempotency, and optional OpenSearch discipline |
-| Runtime Graph-RAG | 11 | Typed planning, graph and vector retrieval, fusion, evidence bundle, synthesis, verification, and abstention |
-| Microservices and APIs | 6 | Versioned APIs, typed errors, idempotency, health, async jobs, security, and tests |
-| Terraform and cloud security | 7 | Reproducible infrastructure, least privilege, encryption, bounded capacity, validated plan, and safe stateful resources |
-| Jenkins and DevOps | 5 | Source-controlled pipeline, gates, immutable images, plan approval, smoke testing, rollback, and archives |
-| Elasticity, observability, and resilience | 5 | Measured scale-out and scale-in, dashboards, failure recovery, synchronized metrics, and cost evidence |
-| Evaluation quality | 4 | Separate data, retrieval, answer, performance, and factory evaluation with raw evidence |
-| Documentation and demonstration | 3 | Reproducible README, report, runbook, diagrams, video, and oral command of the system |
-| Total | 100 | |
+| Agentic factory and agent reproducibility | 3.0 | Correct orchestrator and subagent model, one-writer ownership, hooks, permissions, reports, repair loops, human gates, submission of every agent, and exact replay instructions |
+| Dataset engineering | 1.0 | DBLP plus at least three real linked datasets, manifest, licenses, checksums, schemas, and bounded scripts |
+| Hadoop MapReduce | 2.0 | Correct distributed parsing, normalization, researcher/work blocking, author-team extraction, coauthor-pair preparation, counters, rejects, tests, and EMR run |
+| Entity resolution | 1.5 | Evaluated researcher and work identity resolution, uncertainty, versioned policy, LLM abstention, gold set, metrics, and error analysis |
+| Spark coauthorship analytics | 3.0 | Correct temporal weighted graph, distinct and weighted degree, team-size metrics, components, paths, communities, bridge measure, k-core or equivalent, temporal analysis, tests, and distributed execution |
+| Storage architecture | 1.5 | Correct S3, Neptune, DynamoDB, S3 Vectors, provenance, idempotency, and optional OpenSearch discipline |
+| Runtime agentic collaboration analysis | 2.0 | Typed planning, researcher resolution, graph metrics, path retrieval, community analysis, semantic context, evidence bundle, synthesis, verification, and abstention |
+| Microservices and APIs | 1.0 | Versioned APIs, typed errors, idempotency, health, async jobs, security, and tests |
+| Terraform and cloud security | 1.5 | Reproducible infrastructure, least privilege, encryption, bounded capacity, validated plan, and safe stateful resources |
+| Reproducible build and deployment automation | 0.5 | Source-controlled validation, plan, deployment, smoke, bounded-pipeline, experiment, archive, and cleanup commands |
+| Elasticity, observability, and resilience | 1.0 | Measured scale-out and scale-in, dashboards, failure recovery, synchronized metrics, and cost evidence |
+| Evaluation quality | 1.0 | Separate identity, graph, retrieval, answer, performance, and factory evaluation with raw evidence |
+| Documentation and demonstration | 1.0 | Reproducible README, agent replay instructions, report, runbook, diagrams, video, and oral command of the system |
+| Total | 20.0 | |
 
 ## Evaluation deductions and failure conditions
 
-The following deductions apply unless the instructor publishes a replacement rubric.
+The following deductions apply unless the instructor publishes a replacement rubric. Deductions are expressed against the 20-point project grade.
 
-- Core functionality absent or unable to complete an evidence-backed query: project grade may be zero.
-- Only a generic agent tutorial fork with TaskForge renamed and no ScholarChain pipeline: zero.
+- Core functionality absent or unable to complete an evidence-backed collaboration query: project grade may be zero.
+- Only a generic agent tutorial fork with TaskForge renamed and no ScholarChain collaboration pipeline: zero.
 - Only diagrams, prompts, generated stubs, or service examples with no integrated system: zero.
-- DBLP not actually processed: up to 25 points lost and core functionality may be considered absent.
-- Fewer than three actual enrichment datasets: up to 10 points lost.
-- Hadoop requirement replaced by a local loop, Spark operation, or managed import: up to 15 points lost.
-- Spark graph analytics absent or performed by collecting data to one process: up to 15 points lost.
-- Neptune absent without an instructor-approved substitute: up to 10 points lost.
-- S3 Vectors absent without an instructor-approved substitute: up to 10 points lost.
-- No evaluated entity-resolution process: up to 10 points lost.
-- LLM produces claims without evidence IDs: up to 15 points lost.
-- Claim verifier absent or ceremonial: up to 8 points lost.
-- Terraform missing or incomplete: up to 12 points lost.
-- Jenkins missing or replaced entirely by manual commands: up to 10 points lost.
-- No measured elasticity: up to 8 points lost.
-- No independent reviewer or test-agent separation: up to 8 points lost.
-- Agents share overlapping write ownership without documented control: up to 6 points lost.
-- Constitutional files changed without recorded human ratification: up to 5 points lost per material event.
-- Reviewer modifies production code: up to 5 points lost per event.
-- Agent reports claim commands or tests that were not actually run: up to 10 points lost and possible academic-integrity review.
-- Secrets committed or displayed: up to 20 points lost and immediate incident remediation required.
-- Destructive or high-cost operation performed without approval: up to 20 points lost.
-- Fewer than 25 meaningful unit, contract, integration, and adversarial tests across the repository: up to 10 points lost.
-- Program does not build with documented commands: up to 20 points lost.
-- Missing logging and trace IDs: up to 5 points lost.
-- Hardcoded buckets, endpoints, account IDs, thresholds, or model IDs without configuration rationale: up to 5 points lost.
-- Unjustified mutable shared state in distributed or concurrent code: up to 5 points lost.
-- README commands fail or are incomplete: up to 10 points lost.
-- Documentation cannot explain partitioning, schemas, inputs, outputs, or provenance: up to 15 points lost.
-- Results are reported without raw evidence or reproducible scripts: up to 10 points lost.
-- Cloud resources are left running beyond the approved period without explanation: up to 10 points lost and account restrictions may follow.
-- Student cannot explain selected generated code or architecture during the demonstration: up to 20 points lost.
+- DBLP not actually processed: up to 5 points lost and core functionality may be considered absent.
+- Fewer than three actual enrichment datasets: up to 2 points lost.
+- Hadoop requirement replaced by a local loop, Spark operation, or managed import: up to 3 points lost.
+- Coauthor-pair preparation is missing or incorrect for large author teams: up to 2 points lost.
+- Spark coauthorship analytics absent or performed by collecting the graph to one process: up to 3 points lost.
+- Distinct coauthor count, team-size statistics, connected components, communities, bridge analysis, or k-core or justified equivalent missing: up to 2 points lost depending on scope.
+- Neptune absent without an instructor-approved substitute: up to 2 points lost.
+- S3 Vectors absent without an instructor-approved substitute: up to 2 points lost.
+- No evaluated researcher-identity resolution process: up to 2 points lost.
+- LLM produces numerical, path, or identity claims without evidence IDs: up to 3 points lost.
+- Claim verifier absent or ceremonial: up to 1.5 points lost.
+- Terraform missing or incomplete: up to 2.5 points lost.
+- Required source-controlled reproduction or deployment scripts missing or README commands fail: up to 2 points lost.
+- No measured elasticity: up to 1.5 points lost.
+- No independent reviewer or test-agent separation: up to 1.5 points lost.
+- Not all agents used by the project are submitted: up to 2 points lost.
+- Agent invocation and replay instructions are missing or insufficient for a grader to reproduce a bounded phase: up to 2 points lost.
+- Agents share overlapping write ownership without documented control: up to 1 point lost.
+- Constitutional files changed without recorded human ratification: up to 1 point lost per material event.
+- Reviewer modifies production code: up to 1 point lost per event.
+- Agent reports claim commands or tests that were not actually run: up to 2 points lost and possible academic-integrity review.
+- Secrets committed or displayed: up to 4 points lost and immediate incident remediation required.
+- Destructive or high-cost operation performed without approval: up to 4 points lost.
+- Fewer than 25 meaningful unit, contract, integration, and adversarial tests across the repository: up to 2 points lost.
+- Program does not build with documented commands: up to 4 points lost.
+- Missing logging and trace IDs: up to 1 point lost.
+- Hardcoded buckets, endpoints, account IDs, thresholds, or model IDs without configuration rationale: up to 1 point lost.
+- Unjustified mutable shared state in distributed or concurrent code: up to 1 point lost.
+- Documentation cannot explain partitioning, schemas, inputs, outputs, graph metrics, or provenance: up to 3 points lost.
+- Results are reported without raw evidence or reproducible scripts: up to 2 points lost.
+- Cloud resources are left running beyond the approved period without explanation: up to 2 points lost and account restrictions may follow.
+- Student cannot explain selected agent-generated code, graph metrics, or architecture during the demonstration: up to 4 points lost.
 
 The minimum project grade is zero.
 
@@ -3089,7 +3248,6 @@ Delivery references:
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [Terraform S3 Vectors vector bucket resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3vectors_vector_bucket)
 - [Terraform S3 Vectors index resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3vectors_index)
-- [Jenkins Pipeline](https://www.jenkins.io/doc/book/pipeline/)
 - [sbt](https://www.scala-sbt.org/)
 - [Scala 3](https://docs.scala-lang.org/scala3/)
 
@@ -3124,7 +3282,7 @@ human intent
   -> owner repair
   -> human gate
   -> commit
-  -> Jenkins delivery
+  -> reproducible source-controlled deployment procedure
   -> measured deployment
 ```
 
