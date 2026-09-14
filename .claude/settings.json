@@ -1,0 +1,83 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sbt *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(bash -n *)",
+      "Bash(python3 *)",
+      "Bash(terraform fmt *)",
+      "Bash(terraform validate *)",
+      "Bash(terraform plan *)",
+      "Bash(aws emr describe-cluster *)",
+      "Bash(aws emr list-steps *)",
+      "Bash(aws emr describe-step *)",
+      "Bash(aws neptune describe-db-clusters *)",
+      "Bash(aws neptune describe-db-instances *)",
+      "Bash(aws dynamodb describe-table *)",
+      "Bash(aws s3 ls *)",
+      "Bash(aws s3 cp *)",
+      "Bash(aws ecs describe-services *)",
+      "Bash(aws ecs describe-task-definition *)",
+      "Bash(aws logs tail *)",
+      "Bash(aws cloudwatch get-metric-statistics *)",
+      "Bash(aws cloudwatch describe-alarms *)",
+      "Bash(aws bedrock list-foundation-models *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(terraform apply *)",
+      "Bash(terraform destroy *)",
+      "Bash(aws neptune delete-db-cluster *)",
+      "Bash(aws neptune delete-db-instance *)",
+      "Bash(aws dynamodb delete-table *)",
+      "Bash(aws emr terminate-clusters *)",
+      "Bash(aws s3 rb *)",
+      "Bash(aws ecr delete-repository *)",
+      "Bash(git push --force *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/format-scala.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/guard-dangerous.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/verify-tests-ran.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

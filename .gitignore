@@ -1,0 +1,51 @@
+# Build outputs
+target/
+*/target/
+project/target/
+project/project/
+.bsp/
+
+# sbt / IDE
+.idea/
+.idea_modules/
+*.iml
+*.ipr
+*.iws
+.scala_dependencies
+.worksheet
+.cache
+.history
+.lib/
+
+# Assembly JARs (generated — do not commit)
+*.jar
+!project/*.jar
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/.terraform.lock.hcl
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup
+infra/terraform/tfplan
+infra/terraform/override.tf
+infra/terraform/override.tf.json
+infra/terraform/*_override.tf
+infra/terraform/*_override.tf.json
+
+# Secrets — never committed
+.env
+.env.*
+secrets/
+*.pem
+*.key
+credentials
+
+# Claude Code agent marker
+.claude/.last-test-run
+
+# macOS
+.DS_Store
+
+# Python cache (hooks)
+__pycache__/
+*.pyc
