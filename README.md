@@ -1,16 +1,12 @@
 # CS441 Course Project: ScholarChain
 
-Version: 2.0
-
 Project type: AWS cloud computing, distributed big data processing, AI agentic software engineering, Graph-RAG, Infrastructure as Code, DevOps, elasticity, and empirical evaluation
 
-Grade: To be announced by the instructor
+Grade: 20 points
 
-Submission deadline: To be announced by the instructor
+Submission deadline: Wednesday, November, 25, 2026 at 11PM CST
 
 Reference agentic implementation: [AgenticScalaAppTutorial](https://github.com/0x1DOCD00D/AgenticScalaAppTutorial)
-
-Reference assignment format: [CS441 Fall 2025 Homework 3](https://github.com/0x1DOCD00D/CS441_Fall2025/blob/main/Homeworks/Homework3.md)
 
 ## Project goal
 
